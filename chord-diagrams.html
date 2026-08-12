@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chord Diagrams</title>
+    <title>Chorderoy</title>
     <style>
         * {
             margin: 0;
@@ -15,12 +15,22 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: #fafafa;
             color: #333;
-            padding: 20px;
+            padding: 0 20px 20px;
         }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
+        }
+
+        .sticky-top {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: #fafafa;
+            padding-top: 20px;
+            padding-bottom: 0;
+            margin-bottom: 30px;
         }
 
         header {
@@ -41,7 +51,7 @@
         .controls {
             display: flex;
             gap: 20px;
-            margin-bottom: 40px;
+            margin-bottom: 0;
             flex-wrap: wrap;
             align-items: flex-start;
         }
@@ -217,8 +227,9 @@
 </head>
 <body>
     <div class="container">
+        <div class="sticky-top">
         <header>
-            <h1>Chord Diagrams</h1>
+            <h1>Chorderoy</h1>
             <p class="subtitle" id="datasetSummary"></p>
         </header>
 
@@ -349,6 +360,7 @@
                     <span>Show Difficulty</span>
                 </label>
             </div>
+        </div>
         </div>
 
         <div class="results" id="results"></div>
@@ -3043,58 +3055,42 @@
             }
 
             // Sort by root (naturals/sharps in chromatic order, then flats), then
-            // a two-tier complexity scheme, then quality, name, primary, type.
+            // an explicit interval-shape bucket order, then name, primary, type.
             const ROOT_ORDER = ['A','A#','B','C','C#','D','D#','E','F','F#','G','G#',
                                  'Ab','Bb','Cb','Db','Eb','Fb','Gb'];
-            const QUALITY_RANK = { major: 0, neutral: 0, minor: 1 };
-            // A genuine plain triad: exactly {1, 5, and one of 3/b3} - not just "3 notes total"
-            // (a 3-note chord missing the 5th, like an add6-no-5th voicing, doesn't qualify).
-            const isTriad = (v) => {
+
+            const hasSlash = (v) => v[0].replace(/\*$/, '').includes('/');
+            // Exact interval-set match, ignoring order (e.g. wanted ['1','3','5']
+            // matches a voicing whose intervals are ['1','5','3'] but not one with
+            // an extra note or a missing one).
+            const intervalSetEquals = (v, wanted) => {
                 const intervals = v[3];
-                if (intervals.length !== 3 || v[7].length !== 0) return false;
-                if (v[0].replace(/\*$/, '').includes('/')) return false;
+                if (intervals.length !== wanted.length) return false;
                 const set = new Set(intervals);
-                const has3 = set.has('3'), hasB3 = set.has('b3');
-                return set.has('1') && set.has('5') && (has3 !== hasB3);
+                return wanted.every(iv => set.has(iv)) && set.size === wanted.length;
             };
 
-            // Tier 0 = major triads, minor triads, and power chords (the "simple" vocabulary).
-            // Tier 1 = everything else (7ths, sus chords, altered bass, extensions, aug/dim, etc.)
-            const tier = (v) => (isTriad(v) || v[6] === 'power') ? 0 : 1;
-            // Within tier 0: major triad, then power, then minor triad.
-            const tier0SubRank = (v) => v[6] === 'power' ? 1 : (v[12] === 'minor' ? 2 : 0);
-
-            // Within tier 1: score how many alterations a voicing is from a plain
-            // major/minor triad. Missing the 3rd (sus chords) costs an extra point
-            // on top of whatever tone replaces it, since losing the note that
-            // defines major-vs-minor is a bigger structural change than just adding
-            // a color tone to an otherwise-intact triad.
-            const CORE_INTERVALS = new Set(['1', '3', 'b3', '5']);
-            const complexityScore = (v) => {
-                const intervals = v[3];
-                const has3rd = intervals.includes('3') || intervals.includes('b3');
-                const has5th = intervals.includes('5');
-                let score = 0;
-                if (!has3rd) score++;
-                if (!has5th) score++;
-                for (const iv of intervals) if (!CORE_INTERVALS.has(iv)) score++;
-                if (v[0].replace(/\*$/, '').includes('/')) score++;
-                return score;
-            };
-            // Groups voicings by chord "family" so e.g. all sus2 chords sit together,
-            // all altered-bass chords sit together, etc: 7th < sus2 < sus4 < altered
-            // bass < everything else. This is the dominant key within tier 1 - complexity
-            // score only orders voicings within the same family.
-            const categoryRank = (v) => {
-                const intervals = v[3];
-                const has3rd = intervals.includes('3') || intervals.includes('b3');
-                const hasSlash = v[0].replace(/\*$/, '').includes('/');
-                const extras = intervals.filter(iv => !CORE_INTERVALS.has(iv));
-                if (has3rd && extras.length === 0 && hasSlash) return 3;
-                if (has3rd && extras.length === 1 && (extras[0] === '7' || extras[0] === 'b7')) return 0;
-                if (!has3rd && extras.length === 1 && extras[0] === '2') return 1;
-                if (!has3rd && extras.length === 1 && extras[0] === '4') return 2;
-                return 4;
+            // Explicit display order, per root, by exact interval shape:
+            // 0: 1,3,5 (root position major triad)
+            // 1: 1,5 (power chord)
+            // 2: 1,3,5,b7 (dominant 7th)
+            // 3: 1,3,5 with altered bass (major triad inversion, e.g. "C/E")
+            // 4: 1,2,5 (sus2)
+            // 5: 1,4,5 (sus4)
+            // 6: 1,b3,5 (root position minor triad)
+            // 7: 1,b3,5,b7 (minor 7th)
+            // 8: everything else, sorted by interval string
+            const bucket = (v) => {
+                const slash = hasSlash(v);
+                if (!slash && intervalSetEquals(v, ['1', '3', '5'])) return 0;
+                if (!slash && intervalSetEquals(v, ['1', '5'])) return 1;
+                if (!slash && intervalSetEquals(v, ['1', '3', '5', 'b7'])) return 2;
+                if (slash && intervalSetEquals(v, ['1', '3', '5'])) return 3;
+                if (!slash && intervalSetEquals(v, ['1', '2', '5'])) return 4;
+                if (!slash && intervalSetEquals(v, ['1', '4', '5'])) return 5;
+                if (!slash && intervalSetEquals(v, ['1', 'b3', '5'])) return 6;
+                if (!slash && intervalSetEquals(v, ['1', 'b3', '5', 'b7'])) return 7;
+                return 8;
             };
 
             foundChords.sort((a, b) => {
@@ -3102,25 +3098,14 @@
                 const rootIdxB = ROOT_ORDER.indexOf(b[5]);
                 if (rootIdxA !== rootIdxB) return rootIdxA - rootIdxB;
 
-                const tierA = tier(a), tierB = tier(b);
-                if (tierA !== tierB) return tierA - tierB;
+                const bucketA = bucket(a), bucketB = bucket(b);
+                if (bucketA !== bucketB) return bucketA - bucketB;
 
-                if (tierA === 0) {
-                    const subA = tier0SubRank(a), subB = tier0SubRank(b);
-                    if (subA !== subB) return subA - subB;
-                } else {
-                    // Category is dominant (groups all sus2s together, all altered-bass
-                    // together, etc.); complexity score only orders things within a category.
-                    const catA = categoryRank(a), catB = categoryRank(b);
-                    if (catA !== catB) return catA - catB;
-
-                    const scoreA = complexityScore(a), scoreB = complexityScore(b);
-                    if (scoreA !== scoreB) return scoreA - scoreB;
+                if (bucketA === 8) {
+                    const intervalStrA = a[3].join(',');
+                    const intervalStrB = b[3].join(',');
+                    if (intervalStrA !== intervalStrB) return intervalStrA.localeCompare(intervalStrB);
                 }
-
-                const qualIdxA = QUALITY_RANK[a[12]] ?? 2;
-                const qualIdxB = QUALITY_RANK[b[12]] ?? 2;
-                if (qualIdxA !== qualIdxB) return qualIdxA - qualIdxB;
 
                 const nameA = a[0].replace(/\*$/, '');
                 const nameB = b[0].replace(/\*$/, '');
