@@ -21,10 +21,15 @@
 | 14 | difficulty | string | `'easy'` \| `'medium'` \| `'hard'` — see rule below |
 
 ## Current dataset size (as of last edit)
-- 612 total voicings, 352 unique chord names
-- By type: open 272, barre 123, fretted 67, High Triads 82, power 68
-- By quality: major 273, minor 194, neutral 145
-- By difficulty: easy 171, medium 365, hard 76
+- 614 total voicings, 355 unique chord names
+- By type: open 272, barre 123, fretted 69, High Triads 82, power 68
+- By quality: major 273, minor 196, neutral 145
+- By difficulty: easy 171, medium 365, hard 78
+
+(Latest addition: `D#dim`/`Ebdim` - a plain 3-note diminished triad, added despite no
+clean/easy fretting existing for it, since it's a real chord in "50 Ways to Leave
+Your Lover". Fretted `["x",6,4,2,"x","x"]`, hard difficulty - a 5-fret span was the
+best available voicing for this shape in standard tuning.)
 
 (These counts dropped substantially from an earlier 1,164/711 baseline after a duplicate-cleanup pass — see "Duplicate voicing cleanup" below. Difficulty counts also shifted since fewer `open`/`fretted` voicings remain overall.)
 

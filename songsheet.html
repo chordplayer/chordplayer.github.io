@@ -1,0 +1,2627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chorderoy — Song Sheets</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #fafafa;
+        color: #333;
+    }
+
+    .site-nav {
+        display: flex;
+        gap: 20px;
+        padding: 14px 20px;
+        background: #fff;
+        border-bottom: 1px solid #e5e5e5;
+    }
+
+    .site-nav a {
+        color: #333;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 14px;
+    }
+
+    .site-nav a.active {
+        color: #1a73e8;
+    }
+
+    .site-nav a:hover {
+        text-decoration: underline;
+    }
+
+    .page-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    header h1 {
+        font-size: 28px;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+
+    header p {
+        font-size: 14px;
+        color: #666;
+        margin-bottom: 8px;
+    }
+
+    .input-section {
+        background: #fff;
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        margin-bottom: 12px;
+    }
+
+    .input-row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+    }
+
+    .input-row label.file-btn {
+        display: inline-block;
+        padding: 8px 14px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        background: #fafafa;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+    .input-row label.file-btn:hover {
+        background: #f0f0f0;
+    }
+
+    .input-row input[type="file"] {
+        display: none;
+    }
+
+    #chordproInput {
+        width: 100%;
+        min-height: 140px;
+        font-family: 'SF Mono', Menlo, monospace;
+        font-size: 13px;
+        padding: 10px;
+        border: 1px dashed #ccc;
+        border-radius: 6px;
+        resize: vertical;
+        background: #fff;
+    }
+
+    #chordproInput[readonly] {
+        border-style: solid;
+        cursor: default;
+    }
+
+    #chordproInput.drag-over {
+        border-color: #1a73e8;
+        background: #eef4fe;
+    }
+
+    .input-hint {
+        font-size: 12px;
+        color: #888;
+        margin-top: 6px;
+    }
+
+    .render-btn {
+        padding: 10px 20px;
+        background: #1a73e8;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .render-btn:hover {
+        background: #1558b0;
+    }
+
+    .legend-controls {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-left: auto;
+    }
+
+    .legend-controls label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        cursor: pointer;
+    }
+
+    .print-btn {
+        padding: 8px 16px;
+        background: #fff;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 13px;
+        cursor: pointer;
+    }
+
+    .print-btn:hover {
+        background: #f0f0f0;
+    }
+
+    #outputArea {
+        display: none;
+    }
+
+    .two-pane {
+        display: flex;
+        gap: 24px;
+        align-items: flex-start;
+    }
+
+    .source-view-toggle {
+        display: flex;
+        gap: 16px;
+        margin-top: 15px;
+        font-size: 13px;
+    }
+
+    .source-view-toggle label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+    }
+
+    .sheet-pane {
+        flex: 1;
+        min-width: 0;
+        background: #fff;
+        border-radius: 8px;
+        padding: 20px 28px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        max-height: calc(100vh - 110px);
+        overflow-y: auto;
+    }
+
+    #outputArea {
+        padding-bottom: 100px;
+    }
+
+    .player-bar {
+        display: none;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 72px;
+        background: #fff;
+        border-top: 1px solid #ddd;
+        box-shadow: 0 -2px 6px rgba(0,0,0,0.08);
+        align-items: center;
+        gap: 24px;
+        padding: 0 28px;
+        z-index: 20;
+    }
+
+    .player-bar.visible {
+        display: flex;
+    }
+
+    .player-btn {
+        padding: 10px 20px;
+        background: #1a73e8;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        min-width: 110px;
+    }
+
+    .player-btn:hover {
+        background: #1558b0;
+    }
+
+    .speed-control {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        color: #666;
+    }
+
+    .speed-control input[type="range"] {
+        width: 200px;
+    }
+
+    .speed-control span {
+        min-width: 70px;
+    }
+
+    .play-chords-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: #666;
+        cursor: pointer;
+    }
+
+    .time-sig-control {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: #666;
+    }
+
+    .time-sig-control select {
+        padding: 4px 6px;
+        font-size: 13px;
+    }
+
+    .chord-duration-control {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: #666;
+    }
+
+    .chord-duration-control select {
+        padding: 4px 6px;
+        font-size: 13px;
+    }
+
+    .metronome-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: #666;
+        cursor: pointer;
+    }
+
+    .beat-display {
+        display: flex;
+        gap: 8px;
+    }
+
+    .beat-num {
+        font-size: 14px;
+        font-weight: 600;
+        color: #ccc;
+        min-width: 14px;
+        text-align: center;
+    }
+
+    .beat-num.beat-active {
+        color: #1a73e8;
+        font-size: 18px;
+    }
+
+    .beat-num.beat-active.beat-downbeat {
+        color: #d93025;
+    }
+
+    @media print {
+        .player-bar { display: none !important; }
+    }
+
+    .legend-pane {
+        width: 280px;
+        flex-shrink: 0;
+        position: sticky;
+        top: 20px;
+        max-height: calc(100vh - 110px);
+        overflow-y: auto;
+        background: #fff;
+        border-radius: 8px;
+        padding: 14px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    @media (max-width: 899px) {
+        .two-pane { flex-direction: column; }
+        .legend-pane {
+            width: 100%;
+            max-height: none;
+            position: sticky;
+            top: 0;
+            order: -1;
+            z-index: 5;
+        }
+    }
+
+    /* On screen, the legend is always the 2-wide grid regardless of chord
+       count - the 1-vs-2 column split is a print-only space optimization. */
+    .legend-pane .legend-grid-1,
+    .legend-pane .legend-grid-2 {
+        grid-template-columns: repeat(2, 1fr);
+        justify-items: initial;
+    }
+
+    .legend-title {
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #666;
+        margin-bottom: 10px;
+    }
+
+    .simplify-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .legend-grid {
+        display: grid;
+        gap: 10px;
+    }
+
+    .legend-grid-1 {
+        grid-template-columns: 1fr;
+        justify-items: end;
+    }
+
+    .legend-grid-2 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .legend-cell {
+        text-align: center;
+    }
+
+    .legend-chord-name {
+        font-weight: 600;
+        font-size: 13px;
+        margin-bottom: 4px;
+    }
+
+    .legend-diagram {
+        width: 100%;
+    }
+
+    .legend-diagram svg {
+        display: block;
+        width: 100%;
+        height: auto;
+    }
+
+    .legend-intervals {
+        font-size: 11px;
+        color: #666;
+        margin-top: 2px;
+    }
+
+    .legend-missing {
+        font-size: 11px;
+        color: #aaa;
+        padding: 10px 0;
+    }
+
+    /* --- Rendered song sheet --- */
+
+    .sheet-title {
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1;
+        margin-top: -15px;
+        margin-bottom: 2px;
+    }
+
+    .sheet-subtitle {
+        font-size: 14px;
+        color: #666;
+        margin-bottom: 4px;
+    }
+
+    .sheet-meta {
+        font-size: 13px;
+        color: #666;
+        margin-bottom: 20px;
+    }
+
+    .sheet-section {
+        margin-bottom: 8px;
+    }
+
+    .sheet-section-chorus,
+    .sheet-section-bridge {
+        padding-left: 14px;
+        border-left: 3px solid #ddd;
+    }
+
+    .sheet-section-label {
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 12px;
+        letter-spacing: 0.05em;
+        color: #888;
+        margin: 14px 0 4px;
+    }
+
+    .sheet-line {
+        margin-bottom: 2px;
+    }
+
+    .sheet-lyric {
+        font-family: 'Nimbus Mono PS', 'Courier New', Courier, monospace;
+        white-space: pre;
+        font-size: 15px;
+        line-height: 1.2;
+        font-weight: 700;
+    }
+
+    /* Classic chord-above-lyric-character annotation - used when "Mark time"
+       is off, ignoring any computed/tagged measure timing entirely. Must
+       match .sheet-lyric's font-size exactly - character alignment between
+       the two rows depends on both using the same monospace character
+       width. */
+    .sheet-chords {
+        font-family: 'Nimbus Mono PS', 'Courier New', Courier, monospace;
+        white-space: pre;
+        font-size: 15px;
+        line-height: .8;
+        color: #1a73e8;
+        font-weight: 700;
+    }
+
+    /* Measure/quarter-note grid rendered above a chorded line's lyrics. For
+       lines with lyrics, chords and interpolated ticks are positioned in
+       "ch" units (monospace character widths) - font-family/size here must
+       match .sheet-lyric exactly so 1ch means the same physical width in
+       both rows and everything lines up. Chord-only lines (no lyrics to
+       anchor to) instead get a fixed pixel width with evenly-spaced ticks -
+       see buildEvenGridHTML. */
+    .sheet-grid {
+        position: relative;
+        height: 26px;
+        font-family: 'Nimbus Mono PS', 'Courier New', Courier, monospace;
+        font-size: 15px;
+    }
+
+    .sheet-ticks {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 10px;
+    }
+
+    .tick {
+        position: absolute;
+        bottom: 0;
+        width: 2px;
+        background: #000;
+    }
+
+    .tick-quarter {
+        height: 5px;
+    }
+
+    .tick-measure {
+        height: 10px;
+        width: 4px;
+        background: #000;
+    }
+
+    .sheet-chords-grid {
+        position: absolute;
+        top: 10px;
+        left: 0;
+        right: 0;
+        height: 16px;
+    }
+
+    .chord-label {
+        position: absolute;
+        top: 0;
+        font-weight: 700;
+        color: #1a73e8;
+        white-space: nowrap;
+    }
+
+    /* A chord's own {roy_m:D} duration is only editable while viewing
+       "Chorderoy" - #sheetPane gets this class then (see syncPaneDisplay). */
+    #sheetPane.tags-editable .chord-label {
+        cursor: pointer;
+        border-radius: 3px;
+    }
+
+    #sheetPane.tags-editable .chord-label:hover {
+        background: #e8f0fe;
+    }
+
+    /* The chord currently sounding during Scroll/Play Chords playback, and
+       the chord that will resume next (below) share this same look - scale
+       rather than resize the font so it doesn't reflow the grid's
+       tick-anchored layout; negative margin offsets the added padding so
+       the highlighted box's left edge stays where the chord was anchored. */
+    .chord-label.chord-active,
+    .chord-label.resume-flash {
+        background: #1a73e8;
+        color: #fff;
+        border-radius: 4px;
+        padding: 1px 5px;
+        margin: -1px -5px;
+        transform: scale(1.15);
+        transform-origin: left center;
+        z-index: 2;
+    }
+
+    .chord-label.chord-active {
+        transition: transform 0.15s ease, background 0.15s ease;
+    }
+
+    /* Either a right-click-marked chord, or (with no explicit mark) the
+       chord wherever the sheet is currently scrolled/paused - flashes to
+       show where the *next* Scroll press will resume from (see
+       resumePointChord / updateResumeFlashDOM), instead of playing solid
+       like .chord-active so it reads as "about to happen" rather than
+       "happening now". */
+    .chord-label.resume-flash {
+        animation: chordResumeFlash 1s steps(1, end) infinite;
+    }
+
+    @keyframes chordResumeFlash {
+        50% {
+            background: transparent;
+            color: inherit;
+        }
+    }
+
+    .duration-popup {
+        position: fixed;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #fff;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+        padding: 6px 10px;
+        font-size: 14px;
+    }
+
+    .duration-popup-chord {
+        font-weight: 700;
+        color: #1a73e8;
+        margin-right: 4px;
+        width: 4.5em;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        padding: 3px 5px;
+        font-size: 14px;
+        font-family: inherit;
+    }
+
+    .duration-popup-chord:focus {
+        outline: none;
+        border-color: #1a73e8;
+    }
+
+    .duration-popup button {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: 1px solid #ccc;
+        background: #fafafa;
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .duration-popup button:hover {
+        background: #f0f0f0;
+    }
+
+    .duration-popup-value {
+        min-width: 2.5em;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .sheet-comment {
+        font-style: italic;
+        font-weight: 700;
+        color: #000;
+        margin: 4px 0;
+        margin-left: 10px;
+        font-size: 13px;
+    }
+
+    @media screen {
+        .sheet-comment {
+            color: #1a73e8;
+        }
+    }
+
+    .sheet-spacer {
+        height: 14px;
+    }
+
+    .sheet-tab {
+        font-family: 'SF Mono', Menlo, monospace;
+        font-size: 13px;
+        white-space: pre;
+        margin: 6px 0;
+    }
+
+    .no-song {
+        color: #888;
+        font-size: 14px;
+        padding: 20px;
+    }
+
+    /* Blank scroll runway below the sheet's real content - height set at
+       scroll-start time (see ensureScrollSpacer) so playback can keep
+       scrolling until the whole song has finished, not just until the last
+       line comes into view. */
+    #scrollSpacer {
+        height: 0;
+    }
+
+    /* --- Print --- */
+
+    .print-sheet { display: none; }
+
+    @media print {
+        .site-nav, .page-container > header, .input-section, .two-pane { display: none !important; }
+        .print-sheet { display: block !important; }
+        body { background: #fff; }
+
+        /* position: fixed repeats on every printed page in Chrome's print/PDF
+           engine, which is what makes a non-scrolling right-side chord legend
+           possible in print without a table's <thead> (which can only repeat
+           a top row, not a side column). */
+        .print-legend-fixed {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            right: 0;
+            width: 263px;
+        }
+        /* Single-column layout (<=7 chords): the SVG diagrams scale to fill
+           whatever width their container gives them, so a 1-wide grid needs a
+           narrower container - otherwise each diagram just stretches to the
+           full 263px instead of shrinking to a single-column size. */
+        .print-legend-fixed.legend-narrow {
+            width: 140px;
+        }
+        .print-body-content {
+            margin-right: 283px;
+        }
+        .print-body-content.legend-narrow {
+            margin-right: 160px;
+        }
+        .print-legend-fixed .legend-grid { gap: 6px; }
+        .print-legend-fixed .legend-grid-2 { grid-template-columns: repeat(2, 1fr); }
+        .legend-pane, .sheet-pane { box-shadow: none; padding: 0; }
+
+        /* Keep a chord line and its lyric line glued to the same physical page. */
+        .sheet-line {
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+    }
+
+    /* Chrome's browser-default print margin is ~0.4in (~38px); this sets it
+       about 10px less top/bottom. Adjust if your default margin differs. */
+    @page {
+        margin-top: 32px;
+        margin-bottom: 32px;
+    }
+</style>
+</head>
+<body>
+    <nav class="site-nav">
+        <a href="index.html">Chord Finder</a>
+        <a href="songsheet.html" class="active">Song Sheets</a>
+    </nav>
+
+    <div class="page-container">
+        <header>
+            <h1>Song Sheets</h1>
+            <p>Paste ChordPro text, choose a file, or drop one below to render a formatted, printable song sheet.</p>
+        </header>
+
+        <div class="input-section">
+            <div class="input-row">
+                <label class="file-btn" for="fileInput">Choose ChordPro file&hellip;</label>
+                <input type="file" id="fileInput" accept=".pro,.cho,.chopro,.crd,.txt">
+                <button class="render-btn" id="renderBtn">Render Song Sheet</button>
+                <button class="print-btn" id="printBtn">Print / Save as PDF</button>
+            </div>
+            <textarea id="chordproInput" placeholder="Paste ChordPro text here, or drag a .pro/.cho file onto this box&hellip;
+
+{title: Example Song}
+{artist: Someone}
+{key: G}
+
+{start_of_verse}
+[G]Amazing [C]grace how [G]sweet the sound
+{end_of_verse}"></textarea>
+            <div class="input-hint">Supports standard ChordPro directives (title, artist, key, capo, verse/chorus/bridge, comments, tab blocks) and inline [Chord] markup. Once a song is rendered, "Source" is read-only; switch to "Chorderoy" to edit timing tags (kept in memory only until saved) - click a chord in the song sheet to adjust its duration directly.</div>
+            <div class="source-view-toggle">
+                <label><input type="radio" name="sourceView" id="sourceViewSource" checked> Source</label>
+                <label><input type="radio" name="sourceView" id="sourceViewTagged"> Chorderoy</label>
+                <div class="time-sig-control">
+                    <label for="timeSignatureSelect">Time</label>
+                    <select id="timeSignatureSelect">
+                        <option value="4" selected>4/4</option>
+                        <option value="3">3/4</option>
+                        <option value="2">2/4</option>
+                        <option value="6">6/8</option>
+                        <option value="12">12/8</option>
+                    </select>
+                </div>
+                <div class="chord-duration-control">
+                    <label for="chordDurationSelect">Auto chord duration</label>
+                    <select id="chordDurationSelect">
+                        <option value="1" selected>Full Measure</option>
+                        <option value="0.5">Half measure</option>
+                        <option value="0.25">Quarter measure</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div id="outputArea">
+            <div id="durationPopup" class="duration-popup" style="display:none">
+                <input type="text" class="duration-popup-chord" id="durationPopupChord" autocomplete="off" spellcheck="false">
+                <button type="button" id="durationPopupMinus">&minus;</button>
+                <span class="duration-popup-value" id="durationPopupValue"></span>
+                <button type="button" id="durationPopupPlus">+</button>
+            </div>
+            <div class="two-pane">
+                <div class="sheet-pane" id="sheetPane"></div>
+                <div class="legend-pane">
+                    <label class="simplify-toggle"><input type="checkbox" id="simplifyToggle"> Simplify chords</label>
+                    <div id="legendPane"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="print-sheet">
+        <div class="print-legend-fixed">
+            <div id="printLegend"></div>
+        </div>
+        <div class="print-body-content" id="printBody"></div>
+    </div>
+
+    <div class="player-bar" id="playerBar">
+        <button class="player-btn" id="scrollToggleBtn">&#9654; Scroll</button>
+        <button class="player-btn" id="topBtn">&#8593; Top</button>
+        <div class="speed-control">
+            <label for="bpmSlider">Tempo</label>
+            <input type="range" id="bpmSlider" min="20" max="200" step="1" value="80">
+            <span id="bpmLabel">80 BPM</span>
+        </div>
+        <label class="metronome-toggle"><input type="checkbox" id="metronomeToggle" checked> Metronome</label>
+        <label class="play-chords-toggle"><input type="checkbox" id="playChordsToggle"> Play chords</label>
+        <div class="beat-display" id="beatDisplay"></div>
+        <div class="legend-controls">
+            <label><input type="checkbox" id="legendShowNotes"> Note Names</label>
+            <label><input type="checkbox" id="legendShowIntervals"> Notes/Intervals</label>
+        </div>
+    </div>
+
+    <script src="chord-data.js"></script>
+    <script>
+        // --- ChordPro parsing ---
+
+        function parseChordPro(text) {
+            const lines = text.split(/\r?\n/);
+            const song = { title: '', subtitle: '', artist: '', key: '', capo: '', time: '', tempo: '', sections: [] };
+            let currentSection = { type: 'verse', label: null, lines: [] };
+            let inTab = false;
+            // {roy_m:D} tags (inline, immediately before a chord bracket) set
+            // that chord's ring duration in measures, overriding the fixed
+            // chord-duration setting - see chordpro_time_tags.md. A chord's
+            // position is never tagged directly; it's always the running sum
+            // of every duration before it (see computeMeasureTiming).
+
+            const pushSection = () => {
+                if (currentSection.lines.length > 0) song.sections.push(currentSection);
+            };
+
+            const directiveRe = /^\{([^:}]+)(?::\s*(.*))?\}$/;
+
+            for (const raw of lines) {
+                const line = raw.trim();
+
+                if (line === '') {
+                    currentSection.lines.push({ type: 'blank' });
+                    continue;
+                }
+
+                const m = line.match(directiveRe);
+                if (m) {
+                    const directive = m[1].trim().toLowerCase();
+                    const val = (m[2] || '').trim();
+                    switch (directive) {
+                        case 'title': case 't': song.title = val; break;
+                        case 'subtitle': case 'st': song.subtitle = val; break;
+                        case 'artist': song.artist = val; break;
+                        case 'key': song.key = val; break;
+                        case 'capo': song.capo = val; break;
+                        case 'time': song.time = val; break;
+                        case 'tempo': song.tempo = val; break;
+                        case 'comment': case 'c': case 'comment_italic': case 'ci':
+                            currentSection.lines.push({ type: 'comment', text: val });
+                            break;
+                        case 'start_of_chorus': case 'soc':
+                            pushSection();
+                            currentSection = { type: 'chorus', label: val || 'Chorus', lines: [] };
+                            break;
+                        case 'end_of_chorus': case 'eoc':
+                            pushSection();
+                            currentSection = { type: 'verse', label: null, lines: [] };
+                            break;
+                        case 'start_of_verse': case 'sov':
+                            pushSection();
+                            currentSection = { type: 'verse', label: val || 'Verse', lines: [] };
+                            break;
+                        case 'end_of_verse': case 'eov':
+                            pushSection();
+                            currentSection = { type: 'verse', label: null, lines: [] };
+                            break;
+                        case 'start_of_bridge': case 'sob':
+                            pushSection();
+                            currentSection = { type: 'bridge', label: val || 'Bridge', lines: [] };
+                            break;
+                        case 'end_of_bridge': case 'eob':
+                            pushSection();
+                            currentSection = { type: 'verse', label: null, lines: [] };
+                            break;
+                        case 'start_of_tab': case 'sot':
+                            pushSection();
+                            inTab = true;
+                            currentSection = { type: 'tab', label: null, lines: [] };
+                            break;
+                        case 'end_of_tab': case 'eot':
+                            pushSection();
+                            inTab = false;
+                            currentSection = { type: 'verse', label: null, lines: [] };
+                            break;
+                        default:
+                            break; // unsupported directive, ignore
+                    }
+                    continue;
+                }
+
+                if (inTab) {
+                    currentSection.lines.push({ type: 'tabline', text: raw });
+                    continue;
+                }
+
+                const chords = [];
+                let lyric = '';
+                let i = 0;
+                let pendingInlineMeasureDuration = null;
+                while (i < line.length) {
+                    if (line[i] === '{') {
+                        const end = line.indexOf('}', i);
+                        if (end !== -1) {
+                            // {roy_m:D} - ring duration in measures for the
+                            // chord immediately following it.
+                            const inlineMatch = line.slice(i + 1, end).match(/^roy_m:\s*(\d+(?:\.\d+)?|\.\d+)\s*$/i);
+                            if (inlineMatch) {
+                                pendingInlineMeasureDuration = parseFloat(inlineMatch[1]);
+                                i = end + 1;
+                                continue;
+                            }
+                        }
+                    }
+                    if (line[i] === '[') {
+                        const end = line.indexOf(']', i);
+                        if (end !== -1) {
+                            chords.push({ chord: line.slice(i + 1, end), index: lyric.length, measureDuration: pendingInlineMeasureDuration });
+                            pendingInlineMeasureDuration = null;
+                            i = end + 1;
+                            continue;
+                        }
+                    }
+                    lyric += line[i];
+                    i++;
+                }
+                currentSection.lines.push({ type: 'line', lyric, chords });
+            }
+            pushSection();
+            if (!song.time) song.time = '4/4';
+            if (!song.tempo) song.tempo = '100';
+            return song;
+        }
+
+        // --- Measure timing ---
+        //
+        // Produces, for every rendered lyric/chord line, the 0-based measure
+        // span it occupies, and for every chord, its 0-based measure position
+        // (e.g. 2.25 = second quarter-measure subdivision of measure 3). A
+        // chord's position is never stored directly - it's always the
+        // running sum of every duration before it, continuous across the
+        // whole song (a line break does NOT reset it). Each chord's own
+        // duration comes from its {roy_m:D} tag if present, otherwise the
+        // fixed chordDurationMeasures default. No syllable counting or
+        // lyric-shape heuristics are involved.
+        function computeMeasureTiming(song, chordDurationMeasures) {
+            let cursor = 0; // continuous across the whole song, not reset per line
+            const lineTimings = [];
+            const chordSchedule = [];
+            let lineIdx = 0;
+            // Any chordless line(s) before the first [] chord in the whole
+            // song (e.g. a blank intro, or an unmarked "Intro" label line)
+            // are given zero timeline span rather than the usual 1-measure
+            // filler - they're still rendered, just don't cost any
+            // count-in-equivalent playback/scroll time. The first [] chord
+            // in the song is measure 0 by definition.
+            let seenFirstChord = false;
+
+            for (const section of song.sections) {
+                if (section.type === 'tab') continue;
+
+                for (const line of section.lines) {
+                    if (line.type !== 'line') continue;
+
+                    const lineStart = cursor;
+                    const chords = [...line.chords].sort((a, b) => a.index - b.index);
+                    const hasLyric = line.lyric.trim().length > 0;
+
+                    if (!chords.length && !seenFirstChord) {
+                        lineTimings.push({ lineIdx, measureStart: cursor, measureEnd: cursor, chordPositions: [], hasLyric });
+                        lineIdx++;
+                        continue;
+                    }
+                    if (chords.length) seenFirstChord = true;
+
+                    const chordPositions = [];
+                    chords.forEach((c) => {
+                        const pos = cursor;
+                        const duration = c.measureDuration != null ? c.measureDuration : chordDurationMeasures;
+                        chordPositions.push({ charIndex: c.index, chord: c.chord, measurePosition: pos, measureDuration: duration });
+                        cursor = pos + duration;
+                    });
+
+                    // A chordless line has nothing to time itself against - give
+                    // it a flat 1-measure filler span so it still takes some
+                    // time to scroll past, without snapping the running cursor
+                    // to any measure boundary.
+                    if (!chordPositions.length) cursor = lineStart + 1;
+
+                    lineTimings.push({ lineIdx, measureStart: lineStart, measureEnd: cursor, chordPositions, hasLyric });
+                    for (const cp of chordPositions) {
+                        // A {roy_m:0} chord is a carry-over marker, not a
+                        // new strum - it's shown on the sheet but never
+                        // triggers chord-playback audio.
+                        if (cp.measureDuration === 0) continue;
+                        chordSchedule.push({ chord: cp.chord, measurePosition: cp.measurePosition, measureDuration: cp.measureDuration });
+                    }
+
+                    lineIdx++;
+                }
+            }
+
+            chordSchedule.sort((a, b) => a.measurePosition - b.measurePosition);
+            return { lineTimings, chordSchedule };
+        }
+
+        // --- Tagged ChordPro generation ---
+        //
+        // Serializes a song + its computed timing back into ChordPro text with
+        // explicit {roy_m:D} duration tags inserted. Each chord gets its own
+        // tag placed immediately before it, with exactly its computed
+        // duration - so re-parsing this text and re-running
+        // computeMeasureTiming on it reproduces the identical chord schedule.
+        // Position is never written; it's always re-derived from the running
+        // sum of durations, which is what makes editing one chord's duration
+        // reflow every chord after it.
+
+        function formatMeasureTag(measureDuration) {
+            return String(Math.round(measureDuration * 4) / 4);
+        }
+
+        // Matches QUARTER_TICK_SPACING_CH's spacing, in plain space
+        // characters, for padding out adjacent chords with no real lyric
+        // text between them (see buildTaggedChordPro).
+        const ORPHAN_CHORD_PAD = '      '; // 6 spaces
+
+        function buildTaggedChordPro(song, timing) {
+            const out = [];
+            if (song.title) out.push(`{title: ${song.title}}`);
+            if (song.subtitle) out.push(`{subtitle: ${song.subtitle}}`);
+            if (song.artist) out.push(`{artist: ${song.artist}}`);
+            if (song.key) out.push(`{key: ${song.key}}`);
+            out.push(`{time: ${song.time}}`);
+            out.push(`{tempo: ${song.tempo}}`);
+            out.push(`{capo: ${song.capo || '0'}}`);
+            out.push('');
+
+            let ti = 0;
+            // The header block above already ends with its own blank-line
+            // separator, so any leading blank line(s) the parsed song
+            // starts with (most commonly: the very separator a PREVIOUS
+            // call to this function emitted, now round-tripped back in as
+            // real content) are dropped here rather than re-emitted - else
+            // every parse/edit/serialize cycle would grow one more blank
+            // line than the last. Blank lines after real content has
+            // started are untouched.
+            let bodyStarted = false;
+
+            for (const section of song.sections) {
+                if (section.type === 'chorus') { out.push('{start_of_chorus}'); bodyStarted = true; }
+                else if (section.type === 'bridge') { out.push('{start_of_bridge}'); bodyStarted = true; }
+                else if (section.type === 'tab') { out.push('{start_of_tab}'); bodyStarted = true; }
+                else if (section.type === 'verse' && section.label) { out.push(`{start_of_verse: ${section.label}}`); bodyStarted = true; }
+
+                if (section.type === 'tab') {
+                    for (const l of section.lines) {
+                        if (l.type === 'tabline') { out.push(l.text); bodyStarted = true; }
+                    }
+                } else {
+                    for (const line of section.lines) {
+                        if (line.type === 'blank') {
+                            if (bodyStarted) out.push('');
+                            continue;
+                        }
+                        bodyStarted = true;
+                        if (line.type === 'comment') { out.push(`{comment: ${line.text}}`); continue; }
+
+                        const lt = timing.lineTimings[ti];
+                        ti++;
+                        if (!lt || !lt.chordPositions.length) {
+                            out.push(line.lyric);
+                            continue;
+                        }
+                        // Same line, same line count as the source - each tag
+                        // sits immediately before the chord bracket it belongs
+                        // to: {roy_m: 0.5}[G] lyrics lyrics ...
+                        //
+                        // Two adjacent chords with nothing but whitespace
+                        // between them (e.g. a trailing instrumental tag
+                        // "...ties [D] [G] [D] [G]") get padded out to a
+                        // fixed width instead of keeping their real
+                        // (typically single-space, cramped-looking) gap -
+                        // the grid/tick display is driven by literal
+                        // character position, so this is what actually
+                        // gives them visual breathing room. Gaps with real
+                        // word text are left untouched.
+                        let rebuilt = '';
+                        let cursor = 0;
+                        lt.chordPositions.forEach((cp, j) => {
+                            const gap = line.lyric.slice(cursor, cp.charIndex);
+                            rebuilt += (j > 0 && gap.trim() === '') ? ORPHAN_CHORD_PAD : gap;
+                            rebuilt += `{roy_m: ${formatMeasureTag(cp.measureDuration)}}[${cp.chord}]`;
+                            cursor = cp.charIndex;
+                        });
+                        rebuilt += line.lyric.slice(cursor);
+                        out.push(rebuilt);
+                    }
+                }
+
+                if (section.type === 'chorus') out.push('{end_of_chorus}');
+                else if (section.type === 'bridge') out.push('{end_of_bridge}');
+                else if (section.type === 'tab') out.push('{end_of_tab}');
+                else if (section.type === 'verse' && section.label) out.push('{end_of_verse}');
+            }
+
+            return out.join('\n');
+        }
+
+        // --- Chord name -> voicing lookup ---
+
+        function buildChordNameIndex() {
+            const index = {};
+            for (const key in chordData.standard) {
+                for (const voicing of chordData.standard[key]) {
+                    const name = voicing[0].replace(/\*$/, '');
+                    const existing = index[name];
+                    if (!existing || (voicing[13] && !existing[13])) {
+                        index[name] = voicing;
+                    }
+                }
+            }
+            return index;
+        }
+
+        function normalizeChordName(name) {
+            return name.replace(/min/i, 'm').replace(/-$/, 'm').replace(/Maj/i, 'maj');
+        }
+
+        const chordNameIndex = buildChordNameIndex();
+
+        // --- Rendering ---
+
+        function escapeHtml(s) {
+            return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // Classic ChordPro-style annotation: chords positioned above the
+        // exact lyric character they were written next to, ignoring any
+        // measure timing entirely. Used when "Mark time" is off.
+        function buildChordLine(chords) {
+            if (!chords.length) return null;
+            const sorted = [...chords].sort((a, b) => a.index - b.index);
+            let line = '';
+            for (const { chord, index } of sorted) {
+                // If this chord would otherwise land flush against the previous
+                // one (e.g. adjacent chords on a lyric-less instrumental line),
+                // force at least one space between them.
+                let pos = Math.max(index, line.length);
+                if (line.length > 0 && pos === line.length) pos += 1;
+                line += ' '.repeat(pos - line.length) + chord;
+            }
+            return line;
+        }
+
+        // Fixed character-width spacing between successive quarter-measure
+        // ticks in the grid rendered above CHORD-ONLY lines (no lyrics to
+        // anchor to - see buildLyricAnchoredGridHTML for lines that do have
+        // lyrics). In `ch` units so it lines up with the monospace lyric
+        // text below it, same as the lyric-anchored grid.
+        const QUARTER_TICK_SPACING_CH = 5.5;
+
+        function buildEvenGridHTML(lt) {
+            const measuresSpanned = lt.measureEnd - lt.measureStart;
+            const totalQuarters = Math.round(measuresSpanned * 4);
+            const gridWidth = totalQuarters * QUARTER_TICK_SPACING_CH;
+            let html = `<div class="sheet-grid" style="width:${gridWidth}ch">`;
+
+            html += '<div class="sheet-ticks">';
+            for (let q = 0; q <= totalQuarters; q++) {
+                const frac = q / totalQuarters;
+                // Lines no longer always start on a whole measure, so a tick
+                // is a true measure boundary only if its own absolute
+                // position is a whole number - not just its index in the line.
+                const absolutePosition = lt.measureStart + q / 4;
+                const isMeasure = Math.abs(absolutePosition - Math.round(absolutePosition)) < 1e-6;
+                html += `<span class="tick ${isMeasure ? 'tick-measure' : 'tick-quarter'}" style="left:${(frac * 100).toFixed(3)}%"></span>`;
+            }
+            html += '</div>';
+
+            html += '<div class="sheet-chords-grid">';
+            lt.chordPositions.forEach((cp, chordIdx) => {
+                const frac = (cp.measurePosition - lt.measureStart) / measuresSpanned;
+                html += `<span class="chord-label" data-line-idx="${lt.lineIdx}" data-chord-idx="${chordIdx}" style="left:${(frac * 100).toFixed(3)}%">${escapeHtml(cp.chord)}</span>`;
+            });
+            html += '</div>';
+
+            html += '</div>';
+            return html;
+        }
+
+        // For lines that DO have lyrics: chords are pinned to the exact
+        // lyric character they were written next to (same "ch" coordinate
+        // space .sheet-lyric renders in, so they line up in the DOM), rather
+        // than an evenly-spaced fixed-width box. A quarter/half-measure tick
+        // that lands exactly on a real chord uses that chord's own position;
+        // one that falls between two chords with nothing tagged there is
+        // placed proportionally between their two positions (the midpoint,
+        // when there's exactly one such gap - e.g. the .25 between a .0 and
+        // .5 chord). When that gap crosses a line break - the next real
+        // chord is on a later line - the tick is drawn at the very start of
+        // that later (carry-over) line instead of interpolated mid-air
+        // across two different lines.
+        function computeGridTicks(timing) {
+            const anchors = [];
+            // A {roy_m:0} chord is a carry-over marker, not a new timed
+            // event - excluded entirely from anchor/interpolation
+            // computation, and its exact position is recorded here so ANY
+            // tick that would still land there (including a cross-line
+            // "carry the grid across the break" tick, which lands at the
+            // start of whatever line it's on and would otherwise coincide
+            // with a marker sitting at the start of its line) gets
+            // suppressed too.
+            const suppressedByLine = new Map();
+            for (const lt of timing.lineTimings) {
+                if (!lt.hasLyric) continue;
+                for (const cp of lt.chordPositions) {
+                    if (cp.measureDuration === 0) {
+                        if (!suppressedByLine.has(lt.lineIdx)) suppressedByLine.set(lt.lineIdx, []);
+                        suppressedByLine.get(lt.lineIdx).push(cp.charIndex);
+                        continue;
+                    }
+                    anchors.push({ lineIdx: lt.lineIdx, charIndex: cp.charIndex, measurePosition: cp.measurePosition });
+                }
+            }
+            anchors.sort((a, b) => a.measurePosition - b.measurePosition);
+
+            const ticksByLine = new Map();
+            const addTick = (lineIdx, leftCh, isMeasure) => {
+                const suppressed = suppressedByLine.get(lineIdx);
+                if (suppressed && suppressed.some((s) => Math.abs(s - leftCh) < 1e-6)) return;
+                if (!ticksByLine.has(lineIdx)) ticksByLine.set(lineIdx, []);
+                ticksByLine.get(lineIdx).push({ leftCh, isMeasure });
+            };
+
+            anchors.forEach((a) => {
+                const isMeasure = Math.abs(a.measurePosition - Math.round(a.measurePosition)) < 1e-6;
+                addTick(a.lineIdx, a.charIndex, isMeasure);
+            });
+
+            for (let i = 0; i < anchors.length - 1; i++) {
+                const prev = anchors[i];
+                const next = anchors[i + 1];
+                const span = next.measurePosition - prev.measurePosition;
+                if (span <= 0) continue;
+                const prevStep = Math.round(prev.measurePosition * 4);
+                const nextStep = Math.round(next.measurePosition * 4);
+                for (let step = prevStep + 1; step < nextStep; step++) {
+                    const q = step / 4;
+                    const isMeasure = step % 4 === 0;
+                    if (prev.lineIdx === next.lineIdx) {
+                        const frac = (q - prev.measurePosition) / span;
+                        addTick(prev.lineIdx, prev.charIndex + frac * (next.charIndex - prev.charIndex), isMeasure);
+                    } else {
+                        addTick(next.lineIdx, 0, isMeasure);
+                    }
+                }
+            }
+
+            return ticksByLine;
+        }
+
+        function buildLyricAnchoredGridHTML(line, chordPositions, ticks, lineIdx) {
+            const width = Math.max(line.lyric.length, 1);
+            let html = `<div class="sheet-grid" style="width:${width}ch">`;
+
+            html += '<div class="sheet-ticks">';
+            for (const t of ticks) {
+                html += `<span class="tick ${t.isMeasure ? 'tick-measure' : 'tick-quarter'}" style="left:${t.leftCh.toFixed(2)}ch"></span>`;
+            }
+            html += '</div>';
+
+            html += '<div class="sheet-chords-grid">';
+            chordPositions.forEach((cp, chordIdx) => {
+                html += `<span class="chord-label" data-line-idx="${lineIdx}" data-chord-idx="${chordIdx}" style="left:${cp.charIndex}ch">${escapeHtml(cp.chord)}</span>`;
+            });
+            html += '</div>';
+
+            html += '</div>';
+            return html;
+        }
+
+        function buildSongHTML(song, timing, markTime) {
+            let html = '<div class="sheet-header">';
+            if (song.title) html += `<div class="sheet-title">${escapeHtml(song.title)}</div>`;
+            if (song.subtitle) html += `<div class="sheet-subtitle">${escapeHtml(song.subtitle)}</div>`;
+            const meta = [];
+            if (song.artist) meta.push(escapeHtml(song.artist));
+            if (song.key) meta.push('Key: ' + escapeHtml(song.key));
+            if (song.capo) meta.push('Capo: ' + escapeHtml(song.capo));
+            if (meta.length) html += `<div class="sheet-meta">${meta.join(' &middot; ')}</div>`;
+            html += '</div>';
+
+            let firstChordedLineSeen = false;
+            let lineIdx = 0;
+            const gridTicksByLine = markTime ? computeGridTicks(timing) : null;
+
+            for (const section of song.sections) {
+                html += `<div class="sheet-section sheet-section-${section.type}">`;
+                if (section.label) html += `<div class="sheet-section-label">${escapeHtml(section.label)}</div>`;
+
+                if (section.type === 'tab') {
+                    const tabText = section.lines
+                        .filter(l => l.type === 'tabline')
+                        .map(l => escapeHtml(l.text))
+                        .join('\n');
+                    html += `<pre class="sheet-tab">${tabText}</pre>`;
+                } else {
+                    let lastWasBlank = false;
+                    for (const line of section.lines) {
+                        if (line.type === 'blank') {
+                            if (!lastWasBlank) html += '<div class="sheet-spacer"></div>';
+                            lastWasBlank = true;
+                            continue;
+                        }
+                        lastWasBlank = false;
+
+                        if (line.type === 'comment') {
+                            html += `<div class="sheet-comment">${escapeHtml(line.text)}</div>`;
+                            continue;
+                        }
+
+                        const lt = timing.lineTimings[lineIdx];
+                        const hasChords = markTime
+                            ? (lt && lt.chordPositions.length > 0)
+                            : line.chords.length > 0;
+
+                        if (!firstChordedLineSeen && hasChords) {
+                            html += '<div class="sheet-spacer"></div>';
+                            firstChordedLineSeen = true;
+                        }
+
+                        html += `<div class="sheet-line" data-line-idx="${lineIdx}">`;
+                        if (hasChords) {
+                            if (markTime) {
+                                if (lt.hasLyric) {
+                                    html += buildLyricAnchoredGridHTML(line, lt.chordPositions, gridTicksByLine.get(lineIdx) || [], lineIdx);
+                                } else {
+                                    html += buildEvenGridHTML(lt);
+                                }
+                            } else {
+                                html += `<div class="sheet-chords">${escapeHtml(buildChordLine(line.chords))}</div>`;
+                            }
+                        }
+                        html += `<div class="sheet-lyric">${line.lyric ? escapeHtml(line.lyric) : '&nbsp;'}</div>`;
+                        html += '</div>';
+                        lineIdx++;
+                    }
+                }
+                html += '</div>';
+            }
+            return html;
+        }
+
+        function buildLegendHTML(chordNames, opts) {
+            if (!chordNames.length) {
+                return '<div class="legend-missing">No chords found.</div>';
+            }
+            const gridClass = chordNames.length <= 7 ? 'legend-grid-1' : 'legend-grid-2';
+            let html = `<div class="legend-grid ${gridClass}">`;
+            for (const name of chordNames) {
+                const voicing = chordNameIndex[name] || chordNameIndex[normalizeChordName(name)];
+                html += '<div class="legend-cell">';
+                if (voicing) {
+                    const svg = drawChordDiagram(voicing, 'standard', opts.showNoteNames, false);
+                    // drawChordDiagram draws a sub-label (position/shape, e.g.
+                    // "Open" or "A-shape barre") under the chord name - not wanted
+                    // on the songsheet legend, so strip just that text node out.
+                    const positionLabel = voicing[9];
+                    if (positionLabel) {
+                        for (const t of svg.querySelectorAll('text')) {
+                            if (t.textContent === positionLabel) {
+                                t.remove();
+                                break;
+                            }
+                        }
+                        // drawChordDiagram reserves fixed vertical space for the
+                        // label whether or not it's drawn, so removing just the
+                        // text leaves a gap. Close it by shifting everything below
+                        // the chord-name title up, then trimming the viewBox to match.
+                        const SHIFT = 25;
+                        const titleEl = svg.firstElementChild;
+                        const rest = Array.from(svg.children).filter(el => el !== titleEl);
+                        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                        g.setAttribute('transform', `translate(0, -${SHIFT})`);
+                        rest.forEach(el => g.appendChild(el));
+                        svg.appendChild(g);
+                        const vb = svg.getAttribute('viewBox').split(' ').map(Number);
+                        vb[3] -= SHIFT;
+                        svg.setAttribute('viewBox', vb.join(' '));
+                    }
+                    html += `<div class="legend-diagram">${svg.outerHTML}</div>`;
+                    if (opts.showIntervals) {
+                        html += `<div class="legend-intervals">${voicing[2].join(' ')}</div>`;
+                    }
+                } else {
+                    html += `<div class="legend-chord-name">${escapeHtml(name)}</div>`;
+                    html += '<div class="legend-missing">No diagram</div>';
+                }
+                html += '</div>';
+            }
+            html += '</div>';
+            return html;
+        }
+
+        // Chords already this simple (plain major/minor triad, power chord,
+        // dominant/minor 7th, sus2/sus4, all root-position/no altered bass) are
+        // left alone. Anything more complex - 9ths/11ths/13ths, add-chords,
+        // dim/aug, maj7, altered bass, etc. - gets reduced to root + quality
+        // (+ a b7 if the original had one), which is the simplest substitute
+        // that still keeps the chord's major/minor/dominant-7 character.
+        function simplifyChordName(name) {
+            const voicing = chordNameIndex[name] || chordNameIndex[normalizeChordName(name)];
+            if (!voicing) return name;
+
+            const intervals = voicing[3];
+            const root = voicing[5];
+            const hasSlash = name.includes('/');
+            const has3 = intervals.includes('3');
+            const hasB3 = intervals.includes('b3');
+            const has5 = intervals.includes('5');
+            const hasB7 = intervals.includes('b7');
+
+            const isPower = intervals.length === 2 && intervals.includes('1') && has5;
+            const isSus2 = !hasSlash && intervals.length === 3 && intervals.includes('2') && has5 && !has3 && !hasB3;
+            const isSus4 = !hasSlash && intervals.length === 3 && intervals.includes('4') && has5 && !has3 && !hasB3;
+            const isPlainTriad = !hasSlash && intervals.length === 3 && has5 && (has3 !== hasB3);
+            const isSimple7 = !hasSlash && intervals.length === 4 && has5 && hasB7 && (has3 !== hasB3);
+
+            if (isPower || isSus2 || isSus4 || isPlainTriad || isSimple7) {
+                return name; // already simple, leave as-is
+            }
+
+            let simplified = root;
+            if (hasB3) simplified += 'm';
+            if (hasB7) simplified += '7';
+            return simplified;
+        }
+
+        function applySimplification(song) {
+            return {
+                ...song,
+                sections: song.sections.map(section => {
+                    if (section.type === 'tab') return section;
+                    return {
+                        ...section,
+                        lines: section.lines.map(line => {
+                            if (line.type !== 'line') return line;
+                            return {
+                                ...line,
+                                chords: line.chords.map(c => ({ ...c, chord: simplifyChordName(c.chord) })),
+                            };
+                        }),
+                    };
+                }),
+            };
+        }
+
+        let currentSong = null;
+        let currentChordNames = [];
+
+        function collectChordNames(song) {
+            const seen = new Set();
+            const names = [];
+            for (const section of song.sections) {
+                if (section.type === 'tab') continue;
+                for (const line of section.lines) {
+                    if (line.type !== 'line') continue;
+                    for (const c of line.chords) {
+                        if (!seen.has(c.chord)) {
+                            seen.add(c.chord);
+                            names.push(c.chord);
+                        }
+                    }
+                }
+            }
+            names.sort((a, b) => a.localeCompare(b));
+            return names;
+        }
+
+        function renderLegend() {
+            const opts = {
+                showNoteNames: document.getElementById('legendShowNotes').checked,
+                showIntervals: document.getElementById('legendShowIntervals').checked,
+            };
+            const html = buildLegendHTML(currentChordNames, opts);
+            document.getElementById('legendPane').innerHTML = html;
+            document.getElementById('printLegend').innerHTML = html;
+
+            const narrow = currentChordNames.length <= 7;
+            document.querySelector('.print-legend-fixed').classList.toggle('legend-narrow', narrow);
+            document.querySelector('.print-body-content').classList.toggle('legend-narrow', narrow);
+        }
+
+        let currentLineTimings = [];
+        let currentChordScheduleFull = [];
+
+        // --- Source / tagged-memory state ---
+        //
+        // Two buffers live in memory once a song is loaded: `originalSourceText`
+        // (what was pasted/dropped/chosen - never edited in place) and
+        // `taggedMemoryText` (a working copy seeded from it via
+        // buildTaggedChordPro, editable when "With Time Tags" is selected).
+        // The single #chordproInput box always displays whichever buffer the
+        // sourceView radio currently selects, read-only for Source, editable
+        // for With Time Tags; edits only ever touch taggedMemoryText.
+        // `sourceLoaded` gates that read-only lock - before any song has been
+        // rendered the box is still a plain editable paste/type target.
+        let originalSourceText = '';
+        let taggedMemoryText = '';
+        let tagsDirty = false;
+        let sourceLoaded = false;
+
+        // Scroll speed and chord playback are always driven by
+        // taggedMemoryText's own timing, never the active pane's - raw
+        // source has no explicit {roy_m:} tags (or edits) of its own, so
+        // it's not a meaningful timing source. This is independent of what's
+        // currently displayed/rendered in the sheet.
+        function computeTaggedTiming() {
+            if (!taggedMemoryText || !taggedMemoryText.trim()) return { lineTimings: [], chordSchedule: [] };
+            const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
+            return computeMeasureTiming(parseChordPro(taggedMemoryText), chordDurationMeasures);
+        }
+
+        function renderOutput() {
+            if (!currentSong) return;
+            const simplify = document.getElementById('simplifyToggle').checked;
+            const displaySong = simplify ? applySimplification(currentSong) : currentSong;
+            currentChordNames = collectChordNames(displaySong);
+
+            const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
+            const timing = computeMeasureTiming(displaySong, chordDurationMeasures);
+            const markTime = document.getElementById('sourceViewTagged').checked;
+            const songHTML = buildSongHTML(displaySong, timing, markTime);
+            const scrollTiming = computeTaggedTiming();
+            currentLineTimings = scrollTiming.lineTimings;
+            currentChordScheduleFull = scrollTiming.chordSchedule;
+            // The scroll spacer is appended (not part of songHTML) so it
+            // exists only in the live scrollable sheetPane, not in print
+            // output. Its height is set at scroll-start time (see
+            // ensureScrollSpacer) and reset here on every re-render.
+            document.getElementById('sheetPane').innerHTML = songHTML + '<div id="scrollSpacer"></div>';
+            document.getElementById('printBody').innerHTML = songHTML;
+            activeChordEl = null;
+            updateResumeFlashDOM();
+            renderLegend();
+        }
+
+        // Shows/locks #chordproInput per the sourceView toggle, without
+        // touching either in-memory buffer. Play-along chord audio requires
+        // an actual tagged/edited source (raw source's timing is just the
+        // fixed-duration default, not a meaningful "performance"), so the
+        // toggle is only enabled while "Chorderoy" is selected - clicking a
+        // chord's own duration in the sheet is gated the same way (see
+        // wireChordLabelClicks).
+        function syncPaneDisplay() {
+            const showTagged = document.getElementById('sourceViewTagged').checked;
+            const box = document.getElementById('chordproInput');
+            box.value = showTagged ? taggedMemoryText : originalSourceText;
+            box.readOnly = sourceLoaded && !showTagged;
+
+            const playChords = document.getElementById('playChordsToggle');
+            playChords.disabled = !showTagged;
+            if (!showTagged) playChords.checked = false;
+
+            document.getElementById('sheetPane').classList.toggle('tags-editable', showTagged);
+            if (!showTagged) hideDurationPopup();
+        }
+
+        // Parses and renders whichever buffer the sourceView toggle currently
+        // selects - "Render Song Sheet" and every option toggle (mark time,
+        // chord duration, simplify) go through this, so the sheet always
+        // reflects the visible pane, including any pending tagged-text edits.
+        function renderActive() {
+            if (!sourceLoaded) return;
+            const showTagged = document.getElementById('sourceViewTagged').checked;
+            const text = showTagged ? taggedMemoryText : originalSourceText;
+            if (!text || !text.trim()) return;
+            currentSong = parseChordPro(text);
+            renderOutput();
+            syncPaneDisplay();
+        }
+
+        // Re-tags the whole song from scratch off the unedited original
+        // source, using the current "Chord duration" dropdown as the base
+        // duration for every chord - this is what actually makes that
+        // control mean something once a song is loaded: with every chord in
+        // the tagged buffer already carrying its own explicit {roy_m:D} tag
+        // (needed for the duration-only cascade to round-trip), there's no
+        // "default" left for the dropdown to influence unless something
+        // explicitly regenerates the buffer, which is what this does.
+        // Confirms first if there are unsaved tagged-text edits, since a
+        // full re-tag discards them, same as loading a new file.
+        function regenerateTaggedFromSource() {
+            if (!sourceLoaded) return;
+            if (tagsDirty && !confirm('You have unsaved edits in "With Time Tags" that will be lost. Re-tag from the original source anyway?')) {
+                return;
+            }
+            const song = parseChordPro(originalSourceText);
+            const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
+            const timing = computeMeasureTiming(song, chordDurationMeasures);
+            taggedMemoryText = buildTaggedChordPro(song, timing);
+            tagsDirty = false;
+            document.getElementById('sourceViewTagged').checked = true;
+            renderActive();
+        }
+
+        // Loads a brand new song (paste/drop/file-choose, or the first-ever
+        // Render click before any song is loaded), replacing both buffers.
+        // Confirms first if there are unsaved tagged-text edits, since this
+        // discards them.
+        function loadNewSource(text) {
+            if (!text || !text.trim()) return;
+            if (tagsDirty && !confirm('You have unsaved edits in "With Time Tags" that will be lost. Load this new file anyway?')) {
+                return;
+            }
+
+            originalSourceText = text;
+            currentSong = parseChordPro(text);
+            const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
+            const timing = computeMeasureTiming(currentSong, chordDurationMeasures);
+            taggedMemoryText = buildTaggedChordPro(currentSong, timing);
+            tagsDirty = false;
+            sourceLoaded = true;
+            document.getElementById('sourceViewSource').checked = true;
+            resumePointChord = null;
+
+            renderActive();
+
+            document.getElementById('outputArea').style.display = 'block';
+            document.getElementById('playerBar').classList.add('visible');
+            document.title = (currentSong.title ? currentSong.title + ' — ' : '') + 'Chorderoy Song Sheets';
+
+            // Sync the tempo/time-signature controls to the file's own
+            // metadata, if it specified any.
+            if (currentSong.tempo) {
+                const parsed = parseInt(currentSong.tempo, 10);
+                if (!isNaN(parsed)) {
+                    bpm = parsed;
+                    document.getElementById('bpmSlider').value = bpm;
+                    updateBpmLabel();
+                    resyncMetronomeToBPM();
+                }
+            }
+            if (currentSong.time) {
+                const numerator = currentSong.time.split('/')[0];
+                const select = document.getElementById('timeSignatureSelect');
+                if ([...select.options].some(o => o.value === numerator)) select.value = numerator;
+            }
+            if (!isScrolling && !isCountingIn) updateBeatDisplay(0, getBeatsPerMeasure());
+
+            songElapsedMeasures = 0;
+            scrollStartMeasure = 0;
+            document.getElementById('sheetPane').scrollTop = 0;
+        }
+
+        document.getElementById('renderBtn').addEventListener('click', () => {
+            if (!sourceLoaded) {
+                loadNewSource(document.getElementById('chordproInput').value);
+            } else {
+                renderActive();
+            }
+        });
+
+        document.getElementById('printBtn').addEventListener('click', () => {
+            stopScrolling();
+            window.print();
+        });
+
+        // --- Auto-scroll player ---
+        //
+        // Two independent behaviors:
+        // 1. Page-level: bring the songsheet section to the top of the viewport.
+        //    Happens every time Scroll is pressed - a no-op if it's already there.
+        // 2. Container-level: the actual reading auto-scroll happens INSIDE
+        //    .sheet-pane's own scrollbar (it's a bounded, independently
+        //    scrollable box), not the page. Pausing and resuming preserves that
+        //    internal position; it only resets to its own top if it had already
+        //    reached its own bottom.
+
+        let isScrolling = false;
+        let bpm = 80;
+        let lastFrameTime = null;
+
+        function updateBpmLabel() {
+            document.getElementById('bpmLabel').textContent = bpm + ' BPM';
+        }
+
+        // Chord timing is purely position-based in MEASURE units (see
+        // computeMeasureTiming), independent of BPM - a chord's scheduled
+        // position is "measure 3.5" regardless of tempo. Elapsed playback
+        // position (songElapsedMeasures) advances each frame by
+        // dt / currentMeasureDuration, using whatever BPM is live right now.
+        // Dragging the tempo slider mid-song doesn't rescale this live,
+        // though - see pauseForTempoChange/resumeAfterTempoChange - it
+        // pauses playback for the duration of the drag, then re-counts-in
+        // and resumes at the new tempo from the start of whatever measure
+        // was playing when the drag began.
+        let chordSchedule = [];
+        let chordScheduleIndex = 0;
+        let songElapsedMeasures = 0;
+        let currentMeasurePixelMap = [];
+
+        // Offset added to the metronome-tick-driven chord clock (see
+        // metronomeTick) so chord playback can resume mid-song after a
+        // tempo-change pause, instead of always counting from the song's
+        // first measure. 0 for a normal fresh Scroll press.
+        let songClockBaseMeasure = 0;
+
+        // Chords start the instant the count-in ends (songElapsedMeasures 0 =
+        // the song's own first measure). Scrolling itself doesn't start
+        // moving until playback reaches the second-to-last measure that's
+        // already visible in the sheet's viewport at scrollTop 0 - so the
+        // reader always has one measure of lead-in still on screen before
+        // the sheet begins moving, instead of a fixed delay unrelated to how
+        // much content actually fits. Computed fresh each play in
+        // startScrolling (it depends on the rendered layout and viewport
+        // size). Once it does start, it scrolls at normal tempo-driven speed.
+        let scrollStartMeasure = 0;
+
+        // Faster strum and longer ring than the chord-finder page's default -
+        // works better for backing-track-style playback than the
+        // ring-out-clearly pacing meant for auditioning a single chord.
+        const PLAYBACK_STRUM_DELAY = 0.025;
+        const PLAYBACK_NOTE_DURATION = 3.2;
+
+        function playChordByName(name) {
+            const voicing = chordNameIndex[name] || chordNameIndex[normalizeChordName(name)];
+            if (voicing) playChord(voicing[1], PLAYBACK_STRUM_DELAY, PLAYBACK_NOTE_DURATION);
+        }
+
+        // Maps each rendered line's [measureStart, measureEnd) span to its
+        // actual on-screen pixel range within #sheetPane's scrollable content,
+        // so playback position (in measures) can be converted directly to a
+        // scrollTop. Built once DOM layout is settled, right before scrolling
+        // starts.
+        function buildMeasurePixelMap() {
+            const sheetPane = document.getElementById('sheetPane');
+            const paneTop = sheetPane.getBoundingClientRect().top - sheetPane.scrollTop;
+            const map = [];
+            for (const lt of currentLineTimings) {
+                const el = sheetPane.querySelector(`.sheet-line[data-line-idx="${lt.lineIdx}"]`);
+                if (!el) continue;
+                const pixelTop = el.getBoundingClientRect().top - paneTop;
+                map.push({
+                    measureStart: lt.measureStart,
+                    measureEnd: lt.measureEnd,
+                    pixelTop,
+                    pixelBottom: pixelTop + el.offsetHeight,
+                });
+            }
+            return map;
+        }
+
+        function scrollTopForMeasure(measure) {
+            const map = currentMeasurePixelMap;
+            if (!map.length) return null;
+            if (measure <= map[0].measureStart) return map[0].pixelTop;
+            for (const seg of map) {
+                if (measure >= seg.measureStart && measure <= seg.measureEnd) {
+                    const span = seg.measureEnd - seg.measureStart;
+                    const frac = span > 0 ? (measure - seg.measureStart) / span : 0;
+                    return seg.pixelTop + frac * (seg.pixelBottom - seg.pixelTop);
+                }
+            }
+            // Past the last rendered line - keep scrolling at the rate the
+            // last line established (into the blank spacer below the sheet's
+            // actual content) rather than freezing, so scrolling continues
+            // until the whole song has finished playing.
+            const last = map[map.length - 1];
+            const span = last.measureEnd - last.measureStart;
+            const rate = span > 0 ? (last.pixelBottom - last.pixelTop) / span : 0;
+            return last.pixelBottom + (measure - last.measureEnd) * rate;
+        }
+
+        // Inverse of scrollTopForMeasure - which measure sits at a given
+        // pixel Y position in the sheet's scrollable content. Used to figure
+        // out what's visible at scrollTop 0, before any scrolling starts.
+        function measureForPixelY(pixelY) {
+            const map = currentMeasurePixelMap;
+            if (!map.length) return 0;
+            if (pixelY <= map[0].pixelTop) return map[0].measureStart;
+            for (const seg of map) {
+                if (pixelY >= seg.pixelTop && pixelY <= seg.pixelBottom) {
+                    const span = seg.pixelBottom - seg.pixelTop;
+                    const frac = span > 0 ? (pixelY - seg.pixelTop) / span : 0;
+                    return seg.measureStart + frac * (seg.measureEnd - seg.measureStart);
+                }
+            }
+            const last = map[map.length - 1];
+            const span = last.measureEnd - last.measureStart;
+            const rate = span > 0 ? (last.pixelBottom - last.pixelTop) / span : 0;
+            return rate > 0 ? last.measureEnd + (pixelY - last.pixelBottom) / rate : last.measureEnd;
+        }
+
+        // The true end of the song for stopping purposes. Playback
+        // (metronome, chords, and scroll) all run until this point
+        // regardless of when the visible content itself runs out.
+        let songEndMeasure = 0;
+
+        function scrollStep(timestamp) {
+            if (!isScrolling) return;
+            const sheetPane = document.getElementById('sheetPane');
+            if (lastFrameTime !== null) {
+                const dt = (timestamp - lastFrameTime) / 1000;
+                // Recomputed fresh every frame from the live bpm variable, so a
+                // tempo change mid-song immediately changes how fast measures
+                // (and therefore scroll position) advance. Chord playback is
+                // driven separately, from the metronome's own tick timing (see
+                // metronomeTick), not from this loop.
+                const beatsPerMeasure = getBeatsPerMeasure();
+                const currentMeasureDuration = (60 / bpm) * beatsPerMeasure;
+                songElapsedMeasures += dt / currentMeasureDuration;
+
+                if (songElapsedMeasures >= scrollStartMeasure) {
+                    const scrollElapsed = songElapsedMeasures - scrollStartMeasure;
+                    const target = scrollTopForMeasure(scrollElapsed);
+                    if (target !== null) sheetPane.scrollTop = Math.round(target);
+                }
+            }
+            lastFrameTime = timestamp;
+
+            if (songElapsedMeasures >= songEndMeasure) {
+                songFinished = true;
+                stopScrolling();
+                return;
+            }
+            requestAnimationFrame(scrollStep);
+        }
+
+        // Enough blank space below the sheet's actual content that scrolling
+        // can continue moving (rather than clamp at the browser's natural
+        // scrollHeight) until the whole song - including any tail past the
+        // last visible line - has finished playing.
+        function ensureScrollSpacer() {
+            const sheetPane = document.getElementById('sheetPane');
+            const spacer = document.getElementById('scrollSpacer');
+            if (!spacer) return;
+            spacer.style.height = '0px';
+            const finalScrollTop = scrollTopForMeasure(songEndMeasure - scrollStartMeasure) || 0;
+            const needed = (finalScrollTop + sheetPane.clientHeight) - sheetPane.scrollHeight;
+            spacer.style.height = Math.max(0, needed) + 'px';
+        }
+
+        // Set only when scrolling stops because it reached the actual end
+        // of the song (see scrollStep), not on a manual Stop - so the next
+        // Scroll press knows to snap back to the top rather than treating
+        // wherever the sheet ended up (the last line) as the reposition
+        // point (see startScrolling's "second-to-last visible line" logic).
+        let songFinished = false;
+
+        function startScrolling() {
+            currentMeasurePixelMap = buildMeasurePixelMap();
+
+            const sheetPane = document.getElementById('sheetPane');
+            if (pendingExactResumeMeasure != null) {
+                // An explicit right-click-marked resume point (see
+                // beginCountInThenScroll) already framed the sheet on this
+                // exact measure - use it as-is rather than recomputing from
+                // "wherever the sheet is scrolled", which would just be
+                // wherever that framing left it.
+                scrollStartMeasure = pendingExactResumeMeasure;
+                pendingExactResumeMeasure = null;
+            } else {
+                // What's visible right now (wherever the reader has scrolled
+                // the sheet to) determines when scrolling should start: the
+                // second-to-last measure currently in view, so there's
+                // always a measure of lead-in left on screen when the sheet
+                // begins moving.
+                const lastVisibleMeasure = Math.floor(measureForPixelY(sheetPane.scrollTop + sheetPane.clientHeight));
+                scrollStartMeasure = Math.max(0, lastVisibleMeasure - 1);
+            }
+
+            const lastLineMeasure = currentMeasurePixelMap.length
+                ? currentMeasurePixelMap[currentMeasurePixelMap.length - 1].measureEnd
+                : 0;
+            const lastChordMeasure = chordSchedule.length
+                ? chordSchedule[chordSchedule.length - 1].measurePosition
+                : 0;
+            songEndMeasure = Math.max(lastLineMeasure, lastChordMeasure);
+            ensureScrollSpacer();
+
+            isScrolling = true;
+            lastFrameTime = null;
+            document.getElementById('scrollToggleBtn').innerHTML = '&#9724; Stop';
+            requestAnimationFrame(scrollStep);
+        }
+
+        function stopScrolling() {
+            isScrolling = false;
+            document.getElementById('scrollToggleBtn').innerHTML = '&#9654; Scroll';
+            stopMetronome();
+            clearChordHighlight();
+            updateResumeFlashDOM();
+        }
+
+        // Flat, measure-sorted list of every chord's (lineIdx, chordIdx)
+        // address - the same addressing its rendered .chord-label span
+        // carries as data attributes (see buildLyricAnchoredGridHTML /
+        // buildEvenGridHTML) - so playback position can be looked up
+        // against the DOM each frame.
+        let chordHighlightList = [];
+        let activeChordEl = null;
+
+        function buildChordHighlightList() {
+            const list = [];
+            for (const lt of currentLineTimings) {
+                lt.chordPositions.forEach((cp, chordIdx) => {
+                    list.push({ lineIdx: lt.lineIdx, chordIdx, measurePosition: cp.measurePosition });
+                });
+            }
+            list.sort((a, b) => a.measurePosition - b.measurePosition);
+            return list;
+        }
+
+        // The chord sounding at or immediately before a given measure
+        // position - shared by the playback highlight (elapsedMeasures) and
+        // the paused "will resume here" flash (whatever measure the next
+        // Scroll press would start from).
+        function findChordAtOrBeforeMeasure(measure) {
+            let match = null;
+            for (const entry of chordHighlightList) {
+                if (entry.measurePosition <= measure) match = entry;
+                else break;
+            }
+            return match;
+        }
+
+        function findChordLabelEl(entry) {
+            return entry
+                ? document.querySelector(`#sheetPane .chord-label[data-line-idx="${entry.lineIdx}"][data-chord-idx="${entry.chordIdx}"]`)
+                : null;
+        }
+
+        // Highlights whichever chord is currently sounding, based on the
+        // same elapsed-measure clock that drives scrolling - only relevant
+        // in Chorderoy view, since Source never renders chord-label spans.
+        function updateActiveChordHighlight(elapsedMeasures) {
+            const el = findChordLabelEl(findChordAtOrBeforeMeasure(elapsedMeasures));
+            if (el === activeChordEl) return;
+            if (activeChordEl) activeChordEl.classList.remove('chord-active');
+            activeChordEl = el;
+            if (activeChordEl) activeChordEl.classList.add('chord-active');
+        }
+
+        function clearChordHighlight() {
+            if (activeChordEl) activeChordEl.classList.remove('chord-active');
+            activeChordEl = null;
+        }
+
+        // A chord the reader has right-clicked to designate as where the
+        // *next* Scroll press should start from - overrides both defaults
+        // (resume from wherever the sheet is scrolled, or snap to the top
+        // once the song has played through) - see the sheetPane
+        // 'contextmenu' handler and beginCountInThenScroll. Stored as an
+        // address (not a measure position) so it stays valid across
+        // duration edits that reflow later chords' positions; resolved
+        // fresh each time it's read.
+        let resumePointChord = null; // { lineIdx, chordIdx }
+
+        // Set only for the one beginCountInThenScroll call that consumes a
+        // marked resume point, so startScrolling knows to use that exact
+        // measure instead of recomputing scrollStartMeasure from wherever
+        // the sheet happens to be scrolled.
+        let pendingExactResumeMeasure = null;
+
+        function resolveResumePointMeasure() {
+            if (!resumePointChord) return null;
+            const lt = currentLineTimings[resumePointChord.lineIdx];
+            const cp = lt && lt.chordPositions[resumePointChord.chordIdx];
+            return cp ? cp.measurePosition : null;
+        }
+
+        // Same "second-to-last visible line" calc startScrolling itself
+        // uses, exposed separately so the resume flash (below) can preview
+        // it while stopped, without a Scroll press actually in flight.
+        function computeImplicitResumeMeasure() {
+            if (songFinished) return 0;
+            if (!currentLineTimings.length) return null;
+            currentMeasurePixelMap = buildMeasurePixelMap();
+            if (!currentMeasurePixelMap.length) return null;
+            const sheetPane = document.getElementById('sheetPane');
+            const lastVisibleMeasure = Math.floor(measureForPixelY(sheetPane.scrollTop + sheetPane.clientHeight));
+            return Math.max(0, lastVisibleMeasure - 1);
+        }
+
+        function computePendingResumeMeasure() {
+            if (resumePointChord) return resolveResumePointMeasure();
+            if (tempoPauseState) return tempoPauseState.resumeMeasure;
+            return computeImplicitResumeMeasure();
+        }
+
+        // Chord that would sound at the point the *next* Scroll press
+        // resumes from - flashed (see .resume-flash) whenever playback
+        // isn't actively running, so a right-click mark or a manually
+        // repositioned sheet always shows where it's about to pick up.
+        let resumeFlashEl = null;
+
+        function clearResumeFlash() {
+            if (resumeFlashEl) resumeFlashEl.classList.remove('resume-flash');
+            resumeFlashEl = null;
+        }
+
+        function updateResumeFlashDOM() {
+            clearResumeFlash();
+            if (isScrolling || isCountingIn) return;
+            if (!sourceLoaded || !currentSong || !document.getElementById('sourceViewTagged').checked) return;
+            const measure = computePendingResumeMeasure();
+            if (measure == null) return;
+            chordHighlightList = buildChordHighlightList();
+            const el = findChordLabelEl(findChordAtOrBeforeMeasure(measure));
+            if (el) { el.classList.add('resume-flash'); resumeFlashEl = el; }
+        }
+
+        // --- Metronome + count-in ---
+        //
+        // Runs continuously (visually always; audibly only if the Metronome
+        // toggle is checked) from the moment Scroll is pressed through the end
+        // of playback. A 1-measure count-in happens first - the metronome
+        // ticks through one full measure at the current BPM/time signature;
+        // chord playback begins the instant that ends (see scrollStartMeasure
+        // for why scrolling itself waits longer).
+
+        let metronomeInterval = null;
+        let isCountingIn = false;
+        let countInTimeout = null;
+
+        // Chord playback is driven directly from the metronome's own tick
+        // callback (the same setInterval clock that produces the audible
+        // click), not from the RAF scroll loop - ties chords to the beat you
+        // actually hear instead of two independently-drifting clocks.
+        let metronomeTickCount = 0; // absolute tick count since Scroll was pressed
+        let countInTicks = 0; // ticks that make up the count-in (1 measure)
+
+        function getBeatsPerMeasure() {
+            return parseInt(document.getElementById('timeSignatureSelect').value, 10);
+        }
+
+        // Synthesized tom hit: a sine oscillator with a quick downward pitch
+        // sweep (the "boing" that makes a tom sound like a tom rather than a
+        // flat beep) through a lowpass filter for warmth, plus a short filtered
+        // noise burst for the stick-attack transient. Beat 1 gets a lower,
+        // bigger, louder tom; beats 2-4 get a higher, smaller one - cuts through
+        // a strummed guitar mix better than a low kick drum would.
+        function playMetronomeClick(isDownbeat) {
+            const ctx = getAudioContext();
+            const now = ctx.currentTime;
+
+            const basePitch = isDownbeat ? 60 : 100;
+            const duration = isDownbeat ? 0.3 : 0.22;
+
+            const osc = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(basePitch * 2.5, now);
+            osc.frequency.exponentialRampToValueAtTime(basePitch, now + 0.06);
+
+            const lowpass = ctx.createBiquadFilter();
+            lowpass.type = 'lowpass';
+            lowpass.frequency.value = isDownbeat ? 350 : 500;
+
+            const gain = ctx.createGain();
+            gain.gain.setValueAtTime(isDownbeat ? 0.5 : 0.4, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+            osc.connect(lowpass);
+            lowpass.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + duration + 0.02);
+
+            // Short bandpass-filtered noise burst for the stick attack.
+            const noiseDuration = 0.02;
+            const bufferSize = Math.floor(ctx.sampleRate * noiseDuration);
+            const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+            }
+            const noiseSource = ctx.createBufferSource();
+            noiseSource.buffer = noiseBuffer;
+            const noiseFilter = ctx.createBiquadFilter();
+            noiseFilter.type = 'bandpass';
+            noiseFilter.frequency.value = 1500;
+            const noiseGain = ctx.createGain();
+            noiseGain.gain.setValueAtTime(0.15, now);
+            noiseSource.connect(noiseFilter);
+            noiseFilter.connect(noiseGain);
+            noiseGain.connect(ctx.destination);
+            noiseSource.start(now);
+        }
+
+        function updateBeatDisplay(activeBeat, beatsPerMeasure) {
+            let html = '';
+            for (let i = 1; i <= beatsPerMeasure; i++) {
+                const classes = ['beat-num'];
+                if (i === activeBeat) {
+                    classes.push('beat-active');
+                    if (i === 1) classes.push('beat-downbeat');
+                }
+                html += `<span class="${classes.join(' ')}">${i}</span>`;
+            }
+            document.getElementById('beatDisplay').innerHTML = html;
+        }
+
+        function metronomeTick() {
+            const beatsPerMeasure = getBeatsPerMeasure();
+            const songBeatIndex = metronomeTickCount - countInTicks;
+            metronomeTickCount++;
+
+            // Signed modulo (not JS's remainder, which stays negative for a
+            // negative songBeatIndex) so a count-in shorter than a full
+            // measure - e.g. the 2-beat count-in on tempo-change resume -
+            // still lands on beat 1 exactly when the count-in ends, by
+            // counting backwards from it ("3, 4" leading into "1" in 4/4)
+            // instead of restarting its own 1-based cycle from tick 0.
+            const beatInMeasure = ((songBeatIndex % beatsPerMeasure) + beatsPerMeasure) % beatsPerMeasure + 1;
+            updateBeatDisplay(beatInMeasure, beatsPerMeasure);
+            if (document.getElementById('metronomeToggle').checked) {
+                playMetronomeClick(beatInMeasure === 1);
+            }
+
+            if (songBeatIndex >= 0) {
+                // Same clock that decides when a chord's audio actually
+                // fires (below) - the highlight is driven from this tick,
+                // not the RAF scroll loop's own continuously-advancing
+                // clock, so it can never drift out of sync with what's
+                // actually sounding. Independent of the Play Chords toggle
+                // so the highlight still tracks the beat even when chord
+                // audio itself is off.
+                const elapsedMeasures = songClockBaseMeasure + songBeatIndex / beatsPerMeasure;
+                updateActiveChordHighlight(elapsedMeasures);
+                if (document.getElementById('playChordsToggle').checked) {
+                    let struckThisTick = false;
+                    while (chordScheduleIndex < chordSchedule.length && chordSchedule[chordScheduleIndex].measurePosition <= elapsedMeasures) {
+                        playChordByName(chordSchedule[chordScheduleIndex].chord);
+                        chordScheduleIndex++;
+                        struckThisTick = true;
+                    }
+                    // A chord's duration can carry it past a measure
+                    // boundary with no new {roy_m:} entry marking that
+                    // measure - meaning it's still ringing into it, not
+                    // silent - so re-strum whatever chord is currently
+                    // held at the top of every measure that doesn't mark
+                    // its own.
+                    if (beatInMeasure === 1 && !struckThisTick && chordScheduleIndex > 0) {
+                        playChordByName(chordSchedule[chordScheduleIndex - 1].chord);
+                    }
+                }
+            }
+        }
+
+        function startMetronome() {
+            metronomeTickCount = 0;
+            metronomeTick();
+            metronomeInterval = setInterval(metronomeTick, (60 / bpm) * 1000);
+        }
+
+        // setInterval locks in its delay at creation time, so if BPM changes
+        // while the metronome is already running, the tick rate would otherwise
+        // stay stuck at the old tempo even though scroll speed updates live.
+        // Reschedule the interval (keeping the current beat position) whenever
+        // BPM changes mid-run.
+        function resyncMetronomeToBPM() {
+            if (!metronomeInterval) return;
+            clearInterval(metronomeInterval);
+            metronomeInterval = setInterval(metronomeTick, (60 / bpm) * 1000);
+        }
+
+        function stopMetronome() {
+            isCountingIn = false;
+            if (countInTimeout) {
+                clearTimeout(countInTimeout);
+                countInTimeout = null;
+            }
+            if (metronomeInterval) {
+                clearInterval(metronomeInterval);
+                metronomeInterval = null;
+            }
+            updateBeatDisplay(0, getBeatsPerMeasure());
+        }
+
+        function beginCountInThenScroll() {
+            // Step 1: bring the songsheet section to the top of the viewport
+            // (page-level scroll) - idempotent if it's already there - and
+            // only then start the count-in. Nothing else (metronome, scroll,
+            // chords) happens until this repositioning is done.
+            const sheetPane = document.getElementById('sheetPane');
+            sheetPane.scrollIntoView({ behavior: 'auto', block: 'start' });
+            clearResumeFlash();
+
+            const markedMeasure = resolveResumePointMeasure();
+            if (markedMeasure != null) {
+                // An explicit right-click-marked resume point overrides
+                // both defaults below - frame the sheet on that exact
+                // measure now (startScrolling picks up pendingExactResumeMeasure
+                // instead of recomputing from wherever that leaves the
+                // sheet scrolled). Consumed the instant it's used.
+                currentMeasurePixelMap = buildMeasurePixelMap();
+                const target = scrollTopForMeasure(markedMeasure);
+                if (target !== null) sheetPane.scrollTop = Math.round(target);
+                songElapsedMeasures = markedMeasure;
+                songClockBaseMeasure = markedMeasure;
+                pendingExactResumeMeasure = markedMeasure;
+                songFinished = false;
+                resumePointChord = null;
+            } else {
+                // Reset the internal reading position only if the last
+                // playback ran all the way to the end of the song;
+                // otherwise resume from wherever the sheet is currently
+                // positioned.
+                if (songFinished) {
+                    sheetPane.scrollTop = 0;
+                    songElapsedMeasures = 0;
+                    songFinished = false;
+                }
+                songClockBaseMeasure = 0;
+            }
+
+            // Chord schedule (and the highlight's own copy of chord
+            // positions) are set up now, before the metronome starts
+            // ticking, so they're ready the instant the count-in ends (the
+            // metronome's own tick callback triggers chords and the
+            // highlight - see metronomeTick - and could reach that point
+            // before a setTimeout-based setup in startScrolling would have
+            // run).
+            // playChordsToggle is only ever enabled/checked while "With Time
+            // Tags" is selected (see syncPaneDisplay), so this is always the
+            // tagged schedule already.
+            chordSchedule = document.getElementById('playChordsToggle').checked ? currentChordScheduleFull : [];
+            if (markedMeasure != null) {
+                chordScheduleIndex = chordSchedule.findIndex(c => c.measurePosition >= markedMeasure);
+                if (chordScheduleIndex === -1) chordScheduleIndex = chordSchedule.length;
+            } else {
+                chordScheduleIndex = 0;
+            }
+            chordHighlightList = buildChordHighlightList();
+
+            isCountingIn = true;
+            document.getElementById('scrollToggleBtn').innerHTML = '&#9724; Stop';
+            const beatsPerMeasure = getBeatsPerMeasure();
+            countInTicks = beatsPerMeasure; // 1 measure
+            startMetronome();
+
+            const countInDuration = (60 / bpm) * beatsPerMeasure * 1000; // 1 measure
+            countInTimeout = setTimeout(() => {
+                isCountingIn = false;
+                countInTimeout = null;
+                startScrolling(); // metronome interval keeps running through playback
+            }, countInDuration);
+        }
+
+        // Fully halts playback (Stop, or the Top button interrupting a run
+        // in progress) - as opposed to pauseForTempoChange, which only
+        // suspends it mid-drag expecting a resume.
+        function haltPlayback() {
+            isScrolling = false;
+            tempoPauseState = null;
+            tempoDragActive = false;
+            stopMetronome();
+            clearChordHighlight();
+            document.getElementById('scrollToggleBtn').innerHTML = '&#9654; Scroll';
+            updateResumeFlashDOM();
+        }
+
+        document.getElementById('scrollToggleBtn').addEventListener('click', () => {
+            if (isScrolling || isCountingIn || tempoPauseState) {
+                haltPlayback();
+            } else {
+                beginCountInThenScroll();
+            }
+        });
+
+        // Clicking a chord to edit its duration (or just manually scrolling
+        // around) repositions where the next Scroll press picks up from
+        // (see startScrolling) - this is an explicit way back to measure 0
+        // of the song without having to scroll the sheet there by hand.
+        document.getElementById('topBtn').addEventListener('click', () => {
+            haltPlayback();
+            document.getElementById('sheetPane').scrollTop = 0;
+            songElapsedMeasures = 0;
+            scrollStartMeasure = 0;
+            songFinished = false;
+            resumePointChord = null;
+            updateResumeFlashDOM();
+        });
+
+        // Dragging the tempo slider mid-playback doesn't rescale the running
+        // clock live - it pauses scrolling/metronome/chords/highlight for the
+        // duration of the drag (see pauseForTempoChange), then on release
+        // re-counts-in for 2 beats at the new tempo and resumes from the
+        // start of whatever measure was playing when the drag began (see
+        // resumeAfterTempoChange).
+        let tempoPauseState = null; // { resumeMeasure } while paused for a drag
+        let tempoDragActive = false;
+
+        function pauseForTempoChange() {
+            if (countInTimeout) {
+                clearTimeout(countInTimeout);
+                countInTimeout = null;
+            }
+            if (metronomeInterval) {
+                clearInterval(metronomeInterval);
+                metronomeInterval = null;
+            }
+            isScrolling = false;
+            isCountingIn = false;
+            lastFrameTime = null;
+            tempoPauseState = { resumeMeasure: Math.floor(songElapsedMeasures) };
+            clearChordHighlight();
+            updateResumeFlashDOM();
+        }
+
+        function resumeAfterTempoChange() {
+            if (!tempoPauseState) return;
+            clearResumeFlash();
+            const resumeMeasure = tempoPauseState.resumeMeasure;
+            tempoPauseState = null;
+            songElapsedMeasures = resumeMeasure;
+            songClockBaseMeasure = resumeMeasure;
+            chordScheduleIndex = chordSchedule.findIndex(c => c.measurePosition >= resumeMeasure);
+            if (chordScheduleIndex === -1) chordScheduleIndex = chordSchedule.length;
+
+            isCountingIn = true;
+            document.getElementById('scrollToggleBtn').innerHTML = '&#9724; Stop';
+            countInTicks = 2; // half-measure (2-beat) count-in, not a full measure
+            startMetronome();
+
+            const countInDuration = (60 / bpm) * 2 * 1000; // 2 beats
+            countInTimeout = setTimeout(() => {
+                isCountingIn = false;
+                countInTimeout = null;
+                isScrolling = true;
+                lastFrameTime = null;
+                requestAnimationFrame(scrollStep); // metronome interval keeps running through playback
+            }, countInDuration);
+        }
+
+        document.getElementById('bpmSlider').addEventListener('input', (e) => {
+            bpm = parseInt(e.target.value, 10);
+            updateBpmLabel();
+            if (isScrolling || isCountingIn) {
+                tempoDragActive = true;
+                pauseForTempoChange();
+            } else {
+                resyncMetronomeToBPM();
+            }
+        });
+
+        document.getElementById('bpmSlider').addEventListener('change', () => {
+            if (tempoDragActive) {
+                tempoDragActive = false;
+                resumeAfterTempoChange();
+            }
+        });
+
+        document.getElementById('timeSignatureSelect').addEventListener('change', () => {
+            if (!isScrolling && !isCountingIn) updateBeatDisplay(0, getBeatsPerMeasure());
+        });
+
+        updateBeatDisplay(0, getBeatsPerMeasure());
+
+        document.getElementById('sourceViewSource').addEventListener('change', renderActive);
+        document.getElementById('sourceViewTagged').addEventListener('change', renderActive);
+
+        document.getElementById('chordDurationSelect').addEventListener('change', regenerateTaggedFromSource);
+        document.getElementById('simplifyToggle').addEventListener('change', renderActive);
+        document.getElementById('legendShowNotes').addEventListener('change', renderLegend);
+        document.getElementById('legendShowIntervals').addEventListener('change', renderLegend);
+
+        // Typing is only possible while "With Time Tags" is selected
+        // (Source is read-only once loaded - see syncPaneDisplay); sync
+        // keystrokes into the in-memory tagged buffer as they happen, but
+        // only re-render the sheet on blur so the sheet doesn't jump around
+        // mid-edit.
+        const chordproInputEl = document.getElementById('chordproInput');
+        chordproInputEl.addEventListener('input', () => {
+            if (!sourceLoaded || chordproInputEl.readOnly) return;
+            taggedMemoryText = chordproInputEl.value;
+            tagsDirty = true;
+        });
+        chordproInputEl.addEventListener('blur', () => {
+            if (!sourceLoaded || document.getElementById('sourceViewSource').checked) return;
+            renderActive();
+        });
+
+        // --- Click-to-adjust chord duration ---
+        //
+        // Clicking a chord's own label in the sheet (only while viewing
+        // "Chorderoy" - see syncPaneDisplay's tags-editable class) pops up a
+        // -/+ stepper for that one chord's {roy_m:D} duration, in 0.25-
+        // measure steps, floored at 0. If the chord has no explicit tag
+        // yet, the first click starts from whatever it's currently using
+        // (the "Auto chord duration" setting) rather than an arbitrary
+        // default, so the very first click doesn't jump its timing.
+        const CHORD_DURATION_STEP = 0.25;
+        let durationPopupState = null; // { lineIdx, chordIdx }
+
+        function collectSongLines(song) {
+            const lines = [];
+            for (const section of song.sections) {
+                if (section.type === 'tab') continue;
+                for (const line of section.lines) {
+                    if (line.type === 'line') lines.push(line);
+                }
+            }
+            return lines;
+        }
+
+        // Re-parses the tagged buffer (the only mutable copy) and locates
+        // one specific chord instance by (lineIdx, chordIdx) - the same
+        // addressing the rendered chord-label spans carry as data
+        // attributes. Returns null if the buffer has since changed shape
+        // out from under that address (e.g. stale popup after a reload).
+        function findTaggedChord(lineIdx, chordIdx) {
+            const song = parseChordPro(taggedMemoryText);
+            const line = collectSongLines(song)[lineIdx];
+            if (!line) return null;
+            const chords = [...line.chords].sort((a, b) => a.index - b.index);
+            const chord = chords[chordIdx];
+            if (!chord) return null;
+            return { song, chord };
+        }
+
+        // Re-serializes an edited parse back into the tagged buffer and
+        // re-renders - shared by both duration and chord-name edits.
+        function commitTaggedSong(song) {
+            const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
+            const timing = computeMeasureTiming(song, chordDurationMeasures);
+            taggedMemoryText = buildTaggedChordPro(song, timing);
+            tagsDirty = true;
+            renderActive();
+        }
+
+        // Adjusts one chord's {roy_m:D} duration - the parse -> mutate ->
+        // recompute -> serialize round trip means the duration-only cascade
+        // (position is always derived, never stored) reflows every later
+        // chord automatically.
+        function adjustChordDuration(lineIdx, chordIdx, delta) {
+            const found = findTaggedChord(lineIdx, chordIdx);
+            if (!found) return null;
+            const { song, chord } = found;
+            const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
+            const current = chord.measureDuration != null ? chord.measureDuration : chordDurationMeasures;
+            const next = Math.max(0, Math.round((current + delta) * 4) / 4);
+            chord.measureDuration = next;
+            commitTaggedSong(song);
+            return next;
+        }
+
+        // Renames the chord itself (the [X] bracket content) at one
+        // specific position - e.g. typing "Cm" over a "G". Strips
+        // characters that would break ChordPro bracket/tag syntax; leaves
+        // the chord's duration untouched. Renders through the normal
+        // pipeline, so the chord-diagram legend picks up the new chord
+        // automatically.
+        function renameChordAt(lineIdx, chordIdx, rawName) {
+            const name = rawName.replace(/[[\]{}]/g, '').trim();
+            if (!name) return null;
+            const found = findTaggedChord(lineIdx, chordIdx);
+            if (!found) return null;
+            const { song, chord } = found;
+            if (chord.chord === name) return name;
+            chord.chord = name;
+            commitTaggedSong(song);
+            return name;
+        }
+
+        function updateDurationPopupValue(value) {
+            document.getElementById('durationPopupValue').textContent = String(value);
+        }
+
+        function positionDurationPopup(targetEl) {
+            const popup = document.getElementById('durationPopup');
+            const rect = targetEl.getBoundingClientRect();
+            const popupRect = popup.getBoundingClientRect();
+            let left = rect.left + rect.width / 2 - popupRect.width / 2;
+            left = Math.max(4, Math.min(left, window.innerWidth - popupRect.width - 4));
+            popup.style.left = `${left}px`;
+            popup.style.top = `${rect.bottom + 6}px`;
+        }
+
+        function showDurationPopup(targetEl, lineIdx, chordIdx) {
+            const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
+            const lt = currentLineTimings[lineIdx];
+            const cp = lt && lt.chordPositions[chordIdx];
+            const current = cp ? cp.measureDuration : chordDurationMeasures;
+
+            durationPopupState = { lineIdx, chordIdx };
+            document.getElementById('durationPopupChord').value = targetEl.textContent;
+            updateDurationPopupValue(current);
+
+            const popup = document.getElementById('durationPopup');
+            popup.style.display = 'flex';
+            positionDurationPopup(targetEl);
+        }
+
+        function hideDurationPopup() {
+            durationPopupState = null;
+            document.getElementById('durationPopup').style.display = 'none';
+        }
+
+        function stepDurationPopup(delta) {
+            if (!durationPopupState) return;
+            const { lineIdx, chordIdx } = durationPopupState;
+            const next = adjustChordDuration(lineIdx, chordIdx, delta);
+            if (next == null) { hideDurationPopup(); return; }
+            durationPopupState = { lineIdx, chordIdx };
+            updateDurationPopupValue(next);
+            const target = document.querySelector(`#sheetPane .chord-label[data-line-idx="${lineIdx}"][data-chord-idx="${chordIdx}"]`);
+            if (target) positionDurationPopup(target);
+        }
+
+        function commitDurationPopupChordName() {
+            if (!durationPopupState) return;
+            const { lineIdx, chordIdx } = durationPopupState;
+            const input = document.getElementById('durationPopupChord');
+            const applied = renameChordAt(lineIdx, chordIdx, input.value);
+            if (applied == null) { hideDurationPopup(); return; }
+            durationPopupState = { lineIdx, chordIdx };
+            input.value = applied;
+            const target = document.querySelector(`#sheetPane .chord-label[data-line-idx="${lineIdx}"][data-chord-idx="${chordIdx}"]`);
+            if (target) positionDurationPopup(target);
+        }
+
+        document.getElementById('durationPopupMinus').addEventListener('click', () => stepDurationPopup(-CHORD_DURATION_STEP));
+        document.getElementById('durationPopupPlus').addEventListener('click', () => stepDurationPopup(CHORD_DURATION_STEP));
+        document.getElementById('durationPopupChord').addEventListener('change', commitDurationPopupChordName);
+        document.getElementById('durationPopupChord').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') e.target.blur();
+        });
+
+        document.getElementById('sheetPane').addEventListener('click', (e) => {
+            const target = e.target.closest('.chord-label');
+            if (!target || !document.getElementById('sourceViewTagged').checked) return;
+            const lineIdx = parseInt(target.dataset.lineIdx, 10);
+            const chordIdx = parseInt(target.dataset.chordIdx, 10);
+            if (isNaN(lineIdx) || isNaN(chordIdx)) return;
+            e.stopPropagation();
+            showDurationPopup(target, lineIdx, chordIdx);
+        });
+
+        // Right-click a chord to designate it as where the *next* Scroll
+        // press should start from (see beginCountInThenScroll) - right-
+        // clicking the already-marked chord clears it instead of
+        // re-marking it.
+        document.getElementById('sheetPane').addEventListener('contextmenu', (e) => {
+            const target = e.target.closest('.chord-label');
+            if (!target || !document.getElementById('sourceViewTagged').checked) return;
+            const lineIdx = parseInt(target.dataset.lineIdx, 10);
+            const chordIdx = parseInt(target.dataset.chordIdx, 10);
+            if (isNaN(lineIdx) || isNaN(chordIdx)) return;
+            e.preventDefault();
+            if (resumePointChord && resumePointChord.lineIdx === lineIdx && resumePointChord.chordIdx === chordIdx) {
+                resumePointChord = null;
+            } else {
+                resumePointChord = { lineIdx, chordIdx };
+            }
+            updateResumeFlashDOM();
+        });
+
+        // Manually repositioning the sheet while stopped (no explicit
+        // right-click mark) changes the implicit "resume from wherever
+        // scrolled" point - keep the flash tracking it live. Cheap no-op
+        // while actively playing (updateResumeFlashDOM's own guard), so no
+        // need to filter out the scrollTop writes scrollStep makes each
+        // frame during playback.
+        document.getElementById('sheetPane').addEventListener('scroll', () => {
+            updateResumeFlashDOM();
+        });
+
+        document.addEventListener('click', (e) => {
+            const popup = document.getElementById('durationPopup');
+            if (popup.style.display === 'none') return;
+            if (popup.contains(e.target)) return;
+            hideDurationPopup();
+        });
+
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => loadNewSource(ev.target.result);
+            reader.readAsText(file);
+        });
+
+        const dropZone = document.getElementById('chordproInput');
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            const file = e.dataTransfer.files && e.dataTransfer.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => loadNewSource(ev.target.result);
+            reader.readAsText(file);
+        });
+    </script>
+</body>
+</html>
