@@ -1836,9 +1836,16 @@
                 const currentMeasureDuration = (60 / bpm) * beatsPerMeasure;
                 songElapsedMeasures += dt / currentMeasureDuration;
 
+                // scrollStartMeasure is purely a gate - scrolling doesn't
+                // move until playback reaches it - not a coordinate offset;
+                // currentMeasurePixelMap holds absolute song-measure
+                // positions, so the target must be looked up by the
+                // absolute songElapsedMeasures itself, not measures-past-
+                // the-gate (subtracting here would look up the wrong
+                // measure entirely once scrollStartMeasure is anything
+                // other than ~0, e.g. after a mid-song resume).
                 if (songElapsedMeasures >= scrollStartMeasure) {
-                    const scrollElapsed = songElapsedMeasures - scrollStartMeasure;
-                    const target = scrollTopForMeasure(scrollElapsed);
+                    const target = scrollTopForMeasure(songElapsedMeasures);
                     if (target !== null) sheetPane.scrollTop = Math.round(target);
                 }
             }
@@ -1861,7 +1868,7 @@
             const spacer = document.getElementById('scrollSpacer');
             if (!spacer) return;
             spacer.style.height = '0px';
-            const finalScrollTop = scrollTopForMeasure(songEndMeasure - scrollStartMeasure) || 0;
+            const finalScrollTop = scrollTopForMeasure(songEndMeasure) || 0;
             const needed = (finalScrollTop + sheetPane.clientHeight) - sheetPane.scrollHeight;
             spacer.style.height = Math.max(0, needed) + 'px';
         }
@@ -1873,27 +1880,20 @@
         // point (see startScrolling's "second-to-last visible line" logic).
         let songFinished = false;
 
+        // Only ever called for a fresh start from the very beginning of the
+        // song (see beginCountInThenScroll) - a mid-song resume skips this
+        // entirely and never touches scroll position (see startResumedPlayback).
         function startScrolling() {
             currentMeasurePixelMap = buildMeasurePixelMap();
 
             const sheetPane = document.getElementById('sheetPane');
-            if (pendingExactResumeMeasure != null) {
-                // An explicit right-click-marked resume point (see
-                // beginCountInThenScroll) already framed the sheet on this
-                // exact measure - use it as-is rather than recomputing from
-                // "wherever the sheet is scrolled", which would just be
-                // wherever that framing left it.
-                scrollStartMeasure = pendingExactResumeMeasure;
-                pendingExactResumeMeasure = null;
-            } else {
-                // What's visible right now (wherever the reader has scrolled
-                // the sheet to) determines when scrolling should start: the
-                // second-to-last measure currently in view, so there's
-                // always a measure of lead-in left on screen when the sheet
-                // begins moving.
-                const lastVisibleMeasure = Math.floor(measureForPixelY(sheetPane.scrollTop + sheetPane.clientHeight));
-                scrollStartMeasure = Math.max(0, lastVisibleMeasure - 1);
-            }
+            // What's visible right now (wherever the reader has scrolled
+            // the sheet to) determines when scrolling should start: the
+            // second-to-last measure currently in view, so there's always
+            // a measure of lead-in left on screen when the sheet begins
+            // moving.
+            const lastVisibleMeasure = Math.floor(measureForPixelY(sheetPane.scrollTop + sheetPane.clientHeight));
+            scrollStartMeasure = Math.max(0, lastVisibleMeasure - 1);
 
             const lastLineMeasure = currentMeasurePixelMap.length
                 ? currentMeasurePixelMap[currentMeasurePixelMap.length - 1].measureEnd
@@ -1982,12 +1982,6 @@
         // fresh each time it's read.
         let resumePointChord = null; // { lineIdx, chordIdx }
 
-        // Set only for the one beginCountInThenScroll call that consumes a
-        // marked resume point, so startScrolling knows to use that exact
-        // measure instead of recomputing scrollStartMeasure from wherever
-        // the sheet happens to be scrolled.
-        let pendingExactResumeMeasure = null;
-
         function resolveResumePointMeasure() {
             if (!resumePointChord) return null;
             const lt = currentLineTimings[resumePointChord.lineIdx];
@@ -1995,23 +1989,17 @@
             return cp ? cp.measurePosition : null;
         }
 
-        // Same "second-to-last visible line" calc startScrolling itself
-        // uses, exposed separately so the resume flash (below) can preview
-        // it while stopped, without a Scroll press actually in flight.
-        function computeImplicitResumeMeasure() {
-            if (songFinished) return 0;
-            if (!currentLineTimings.length) return null;
-            currentMeasurePixelMap = buildMeasurePixelMap();
-            if (!currentMeasurePixelMap.length) return null;
-            const sheetPane = document.getElementById('sheetPane');
-            const lastVisibleMeasure = Math.floor(measureForPixelY(sheetPane.scrollTop + sheetPane.clientHeight));
-            return Math.max(0, lastVisibleMeasure - 1);
-        }
-
+        // Where the *next* Scroll press will resume from: an explicit
+        // right-click mark takes priority; otherwise it's wherever playback
+        // actually last was (songElapsedMeasures - the last chord that was
+        // really played, not a guess based on where the sheet happens to be
+        // scrolled), or measure 0 once the song has played through to the
+        // end (songFinished).
         function computePendingResumeMeasure() {
             if (resumePointChord) return resolveResumePointMeasure();
             if (tempoPauseState) return tempoPauseState.resumeMeasure;
-            return computeImplicitResumeMeasure();
+            if (songFinished) return 0;
+            return songElapsedMeasures;
         }
 
         // Chord that would sound at the point the *next* Scroll press
@@ -2203,74 +2191,96 @@
             updateBeatDisplay(0, getBeatsPerMeasure());
         }
 
+        // Runs the metronome for `ticks` beats (visually always; audibly
+        // only if the Metronome toggle is checked), then calls
+        // onCountInEnd - shared by a fresh start (1 full measure), a
+        // mid-song resume (2 beats - see beginCountInThenScroll), and a
+        // tempo-change resume (also 2 beats - see resumeAfterTempoChange).
+        function startCountIn(ticks, onCountInEnd) {
+            isCountingIn = true;
+            document.getElementById('scrollToggleBtn').innerHTML = '&#9724; Stop';
+            countInTicks = ticks;
+            startMetronome();
+
+            const countInDuration = (60 / bpm) * ticks * 1000;
+            countInTimeout = setTimeout(() => {
+                isCountingIn = false;
+                countInTimeout = null;
+                onCountInEnd();
+            }, countInDuration);
+        }
+
+        // Resumes scrolling immediately, with no lead-in wait and no
+        // change to scroll position - used whenever playback is picking up
+        // mid-song (a marked chord, wherever it last stopped, or after a
+        // tempo-change pause) rather than starting fresh from the top.
+        function resumePlaybackImmediately() {
+            isScrolling = true;
+            lastFrameTime = null;
+            requestAnimationFrame(scrollStep); // metronome interval keeps running through playback
+        }
+
         function beginCountInThenScroll() {
-            // Step 1: bring the songsheet section to the top of the viewport
-            // (page-level scroll) - idempotent if it's already there - and
-            // only then start the count-in. Nothing else (metronome, scroll,
-            // chords) happens until this repositioning is done.
             const sheetPane = document.getElementById('sheetPane');
             sheetPane.scrollIntoView({ behavior: 'auto', block: 'start' });
             clearResumeFlash();
 
-            const markedMeasure = resolveResumePointMeasure();
-            if (markedMeasure != null) {
-                // An explicit right-click-marked resume point overrides
-                // both defaults below - frame the sheet on that exact
-                // measure now (startScrolling picks up pendingExactResumeMeasure
-                // instead of recomputing from wherever that leaves the
-                // sheet scrolled). Consumed the instant it's used.
-                currentMeasurePixelMap = buildMeasurePixelMap();
-                const target = scrollTopForMeasure(markedMeasure);
-                if (target !== null) sheetPane.scrollTop = Math.round(target);
-                songElapsedMeasures = markedMeasure;
-                songClockBaseMeasure = markedMeasure;
-                pendingExactResumeMeasure = markedMeasure;
-                songFinished = false;
-                resumePointChord = null;
-            } else {
-                // Reset the internal reading position only if the last
-                // playback ran all the way to the end of the song;
-                // otherwise resume from wherever the sheet is currently
-                // positioned.
-                if (songFinished) {
-                    sheetPane.scrollTop = 0;
-                    songElapsedMeasures = 0;
-                    songFinished = false;
-                }
-                songClockBaseMeasure = 0;
-            }
+            const resumeMeasure = computePendingResumeMeasure();
+            resumePointChord = null; // consume any explicit mark either way
 
-            // Chord schedule (and the highlight's own copy of chord
-            // positions) are set up now, before the metronome starts
-            // ticking, so they're ready the instant the count-in ends (the
+            // Chord schedule is set up now, before the metronome starts
+            // ticking, so it's ready the instant the count-in ends (the
             // metronome's own tick callback triggers chords and the
-            // highlight - see metronomeTick - and could reach that point
-            // before a setTimeout-based setup in startScrolling would have
-            // run).
+            // highlight - see metronomeTick).
             // playChordsToggle is only ever enabled/checked while "With Time
             // Tags" is selected (see syncPaneDisplay), so this is always the
             // tagged schedule already.
             chordSchedule = document.getElementById('playChordsToggle').checked ? currentChordScheduleFull : [];
-            if (markedMeasure != null) {
-                chordScheduleIndex = chordSchedule.findIndex(c => c.measurePosition >= markedMeasure);
+
+            if (resumeMeasure > 0) {
+                // Resuming mid-song - a right-click mark, or wherever
+                // playback actually last stopped - never repositions the
+                // sheet; once the count-in ends, scrolling just continues
+                // moving from wherever it's already scrolled. A short
+                // 2-beat count-in (beats "3, 4" counting into the downbeat
+                // - see metronomeTick's signed modulo) instead of a full
+                // measure, and no lead-in wait, since the reader is already
+                // looking at roughly the right spot.
+                songFinished = false;
+                songElapsedMeasures = resumeMeasure;
+                songClockBaseMeasure = resumeMeasure;
+                scrollStartMeasure = resumeMeasure;
+                chordScheduleIndex = chordSchedule.findIndex(c => c.measurePosition >= resumeMeasure);
                 if (chordScheduleIndex === -1) chordScheduleIndex = chordSchedule.length;
+                chordHighlightList = buildChordHighlightList();
+
+                currentMeasurePixelMap = buildMeasurePixelMap();
+                const lastLineMeasure = currentMeasurePixelMap.length
+                    ? currentMeasurePixelMap[currentMeasurePixelMap.length - 1].measureEnd
+                    : 0;
+                const lastChordMeasure = chordSchedule.length
+                    ? chordSchedule[chordSchedule.length - 1].measurePosition
+                    : 0;
+                songEndMeasure = Math.max(lastLineMeasure, lastChordMeasure);
+                ensureScrollSpacer();
+
+                startCountIn(2, resumePlaybackImmediately);
             } else {
+                // A fresh start from the very beginning of the song (also
+                // reached once the song has played through - songFinished
+                // resets resumeMeasure to 0 above) - full 1-measure
+                // count-in, and startScrolling's usual lead-in wait/gate.
+                if (songFinished) {
+                    sheetPane.scrollTop = 0;
+                    songFinished = false;
+                }
+                songElapsedMeasures = 0;
+                songClockBaseMeasure = 0;
                 chordScheduleIndex = 0;
+                chordHighlightList = buildChordHighlightList();
+
+                startCountIn(getBeatsPerMeasure(), startScrolling);
             }
-            chordHighlightList = buildChordHighlightList();
-
-            isCountingIn = true;
-            document.getElementById('scrollToggleBtn').innerHTML = '&#9724; Stop';
-            const beatsPerMeasure = getBeatsPerMeasure();
-            countInTicks = beatsPerMeasure; // 1 measure
-            startMetronome();
-
-            const countInDuration = (60 / bpm) * beatsPerMeasure * 1000; // 1 measure
-            countInTimeout = setTimeout(() => {
-                isCountingIn = false;
-                countInTimeout = null;
-                startScrolling(); // metronome interval keeps running through playback
-            }, countInDuration);
         }
 
         // Fully halts playback (Stop, or the Top button interrupting a run
@@ -2344,19 +2354,7 @@
             chordScheduleIndex = chordSchedule.findIndex(c => c.measurePosition >= resumeMeasure);
             if (chordScheduleIndex === -1) chordScheduleIndex = chordSchedule.length;
 
-            isCountingIn = true;
-            document.getElementById('scrollToggleBtn').innerHTML = '&#9724; Stop';
-            countInTicks = 2; // half-measure (2-beat) count-in, not a full measure
-            startMetronome();
-
-            const countInDuration = (60 / bpm) * 2 * 1000; // 2 beats
-            countInTimeout = setTimeout(() => {
-                isCountingIn = false;
-                countInTimeout = null;
-                isScrolling = true;
-                lastFrameTime = null;
-                requestAnimationFrame(scrollStep); // metronome interval keeps running through playback
-            }, countInDuration);
+            startCountIn(2, resumePlaybackImmediately);
         }
 
         document.getElementById('bpmSlider').addEventListener('input', (e) => {
