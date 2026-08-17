@@ -1,4 +1,4 @@
-// Shared chord database + fretboard-diagram renderer, used by every Chorderoy page.
+// Shared chord database + fretboard-diagram renderer, used by every ChordPlayer page.
                                                                                 const chordData = {
     "standard": {
         "a": [
@@ -2238,6 +2238,15 @@
             // on the other side: 12 + leftMargin ~= 20, plus a small safety buffer.
             const leftMargin = 10;
             svg.setAttribute('viewBox', `-${leftMargin} 0 ${width + leftMargin} ${height}`);
+            // Explicit width/height (matching the viewBox) alongside CSS-driven
+            // display sizing - without these, an SVG's intrinsic size (used by
+            // Chrome's print/PDF pagination to measure its box) falls back to
+            // the browser default of 300x150, wildly wrong for this diagram
+            // and enough to make Chrome misjudge available page space. This
+            // was the cause of large blank gaps at the top of printed/PDF song
+            // sheets whenever the chord legend was present.
+            svg.setAttribute('width', width + leftMargin);
+            svg.setAttribute('height', height);
             svg.setAttribute('xmlns', svgNS);
             svg.setAttribute('style', 'background: white;');
 
