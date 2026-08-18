@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChordPlayer — Song Sheets</title>
+<title>ChordPlayer</title>
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -16,7 +16,7 @@
     .site-nav {
         display: flex;
         gap: 20px;
-        padding: 14px 20px;
+        padding: 14px 40px;
         background: #fff;
         border-bottom: 1px solid #e5e5e5;
     }
@@ -37,9 +37,9 @@
     }
 
     .page-container {
-        max-width: 1400px;
+        max-width: 1440px;
         margin: 0 auto;
-        padding: 20px;
+        padding: 5px 40px;
     }
 
     header h1 {
@@ -54,38 +54,69 @@
         margin-bottom: 8px;
     }
 
-    .input-section {
+    /* Capped and centered like .page-container below it, all four corners
+       rounded so it reads as its own floating card. Two stacked rows (see
+       .settings-row) - Load/Convert/Save-related on top, view/timing
+       controls below. */
+    .chordplayer-bar {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 13px;
         background: #fff;
         border-radius: 8px;
-        padding: 16px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        margin-bottom: 12px;
+        padding: 6px 40px;
     }
 
-    .input-row {
+    .settings-row {
         display: flex;
-        gap: 12px;
         align-items: center;
-        flex-wrap: wrap;
-        margin-bottom: 10px;
+        gap: 16px;
     }
 
-    .input-row label.file-btn {
-        display: inline-block;
-        padding: 8px 14px;
-        border: 1px solid #ccc;
+    /* Matches the segmented controls' own label sizing (padding/font-size
+       inherited from .chordplayer-bar) so every action button here -
+       Load Song, Save, Print/Save as PDF - reads as the same height/style
+       as Chordplayer/Chordpro next to them - just permanently "on" (solid
+       blue) rather than a toggle. */
+    .chordplayer-bar .file-btn,
+    .chordplayer-bar .print-btn {
+        display: flex;
+        align-items: center;
+        padding: 4px 10px;
+        border: none;
         border-radius: 6px;
-        background: #fafafa;
+        background: #1a73e8;
+        color: #fff;
         cursor: pointer;
-        font-size: 14px;
+        font: inherit;
+        white-space: nowrap;
     }
 
-    .input-row label.file-btn:hover {
-        background: #f0f0f0;
+    .chordplayer-bar .file-btn:hover,
+    .chordplayer-bar .print-btn:hover {
+        background: #1558b0;
     }
 
-    .input-row input[type="file"] {
+    .chordplayer-bar input[type="file"] {
         display: none;
+    }
+
+    /* Save / Print / Print diagrams - pinned to the right edge of the
+       settings bar, away from the load/view/timing controls on the left. */
+    .settings-actions {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-left: auto;
+    }
+
+    .print-diagrams-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
     }
 
     /* Shares the .sheet-pane class (padding/border-radius/box-shadow/
@@ -93,55 +124,41 @@
        visual slot, at the exact same size, as #sheetPane - the two are
        simply toggled display:none/block against each other (see
        syncPaneDisplay) rather than being merged into one element. */
-    #chordproInput {
+    #rawPane {
         width: 100%;
         /* .sheet-pane only ever sets max-height (grows with content, capped
-           there) - #chordproInput uses the same value as a fixed height
+           there) - #rawPane uses the same value as a fixed height
            instead, so it always occupies the full available space up
-           front regardless of how much text is in it. */
-        height: calc(100vh - 110px);
+           front regardless of how much text is in it. --pane-height is
+           set live by updateSheetPaneHeight() to whatever actually fits
+           between .chordplayer-bar and .player-bar; the calc() is
+           just a pre-JS fallback. */
+        height: var(--pane-height, calc(100vh - 110px));
         font-family: 'SF Mono', Menlo, monospace;
         font-size: 13px;
         resize: vertical;
         border: none;
     }
 
-    #chordproInput[readonly] {
+    #rawPane[readonly] {
         cursor: default;
     }
 
-    #chordproInput.drag-over {
+    #rawPane.drag-over {
         outline: 2px solid #1a73e8;
         background: #eef4fe;
     }
 
-    .input-hint {
-        font-size: 12px;
-        color: #888;
-        margin-top: 6px;
-    }
-
-    .render-btn {
-        padding: 10px 20px;
-        background: #1a73e8;
-        color: #fff;
-        border: none;
-        border-radius: 6px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-    }
-
-    .render-btn:hover {
-        background: #1558b0;
-    }
-
+    /* Sits inside .legend-pane, directly under .simplify-toggle - shares
+       its bottom border/spacing so both read as one settings block above
+       the chord legend grid. */
     .legend-controls {
         display: flex;
         gap: 16px;
         align-items: center;
         flex-wrap: wrap;
-        margin-left: auto;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
     }
 
     .legend-controls label {
@@ -152,42 +169,66 @@
         cursor: pointer;
     }
 
-    .print-btn {
-        padding: 8px 16px;
-        background: #fff;
-        border: 1px solid #ccc;
-        border-radius: 6px;
-        font-size: 13px;
-        cursor: pointer;
-    }
-
-    .print-btn:hover {
-        background: #f0f0f0;
-    }
-
     .two-pane {
         display: flex;
-        gap: 24px;
+        gap: 12px;
         align-items: flex-start;
     }
 
-    .source-view-toggle {
-        display: flex;
-        gap: 16px;
-        margin-top: 15px;
-        font-size: 13px;
+    /* Positioning context for .video-panel, which floats in its top-right
+       corner (see below) without affecting #rawPane/#sheetPane's own
+       layout or size. */
+    .sheet-pane-wrapper {
+        position: relative;
+        flex: 1;
+        min-width: 0;
     }
 
-    .source-view-toggle label {
+    .chordplayer-bar label {
         display: flex;
         align-items: center;
         gap: 6px;
         cursor: pointer;
     }
 
-    .view-mode-toggle {
+    /* Groups a pair of related radio options (Chordpro/Chordplayer,
+       Raw/Songsheet) into one pill so it reads as a single two-way switch
+       rather than two unrelated options - the selected side fills solid
+       blue (see the :has rule below) instead of relying on the tiny radio
+       dot alone to show which one's active. */
+    .segmented {
         display: flex;
-        gap: 16px;
+        border: 1px solid #1a73e8;
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .segmented label {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+        justify-content: center;
+        white-space: nowrap;
+        margin: 0;
+        padding: 4px 10px;
+        color: #1a73e8;
+    }
+
+    .segmented label:not(:last-child) {
+        border-right: 1px solid #1a73e8;
+    }
+
+    .segmented label:has(input:checked) {
+        background: #1a73e8;
+        color: #fff;
+    }
+
+    /* Taken out of flow entirely (not just shrunk to 0x0) so it can't leave
+       behind a phantom flex gap that would push the label's text off
+       center - the label's only visible flex content is its text. */
+    .segmented input[type="radio"] {
+        position: absolute;
+        opacity: 0;
     }
 
     .sheet-pane {
@@ -195,9 +236,9 @@
         min-width: 0;
         background: #fff;
         border-radius: 8px;
-        padding: 20px 28px;
+        padding: 20px 24px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        max-height: calc(100vh - 110px);
+        max-height: var(--pane-height, calc(100vh - 110px));
         overflow-y: auto;
     }
 
@@ -205,19 +246,21 @@
         padding-bottom: 100px;
     }
 
+    /* Two stacked rows (see .player-bar-row), same shape as
+       .chordplayer-bar above the page - Top/Scroll are the first
+       control of each row so they land in the same column and read as a
+       stacked pair, not two unrelated buttons. */
     .player-bar {
         display: none;
         position: fixed;
         left: 0;
         right: 0;
         bottom: 0;
-        height: 72px;
+        flex-direction: column;
+        gap: 4px;
         background: #fff;
-        border-top: 1px solid #ddd;
-        box-shadow: 0 -2px 6px rgba(0,0,0,0.08);
-        align-items: center;
-        gap: 24px;
-        padding: 0 28px;
+        border-top: 5px solid #fafafa;
+        padding: 6px 40px;
         z-index: 20;
     }
 
@@ -225,26 +268,52 @@
         display: flex;
     }
 
+    .player-bar-row {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+    }
+
+    /* Same padding/font/color/border-radius as the
+       .chordplayer-bar .print-btn buttons above the page, so Top and
+       Scroll read as the same button style throughout the page. */
     .player-btn {
-        padding: 10px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        /* Fixed height (padding alone would let it vary a px or two with
+           whichever glyph is currently inside - e.g. #metronomePlayBtn
+           swapping between the play/stop symbols - which then changes the
+           player-bar row's own height each click since it sizes to its
+           tallest child). */
+        height: 24px;
+        padding: 0 10px;
         background: #1a73e8;
         color: #fff;
         border: none;
         border-radius: 6px;
-        font-size: 14px;
-        font-weight: 600;
+        font: inherit;
+        font-size: 13px;
         cursor: pointer;
-        min-width: 110px;
     }
 
     .player-btn:hover {
         background: #1558b0;
     }
 
-    /* 15% narrower than the default .player-btn min-width (110px), to make
-       room for the Save button on the same row without crowding. */
-    #scrollToggleBtn, #topBtn {
-        min-width: 94px;
+    /* Fixed, shared width so Top (row 1) and Scroll (row 2) - each the
+       first control in its row - line up in the same column and read as a
+       stacked pair. */
+    .player-stack-btn {
+        min-width: 90px;
+    }
+
+    /* Fixed width so swapping between the play/stop glyphs (see
+       metronomePlayBtn's innerHTML toggling) never shifts the button's -
+       or the row's - own width, same reasoning as .player-btn's fixed
+       height above. */
+    #metronomePlayBtn {
+        width: 32px;
     }
 
     .speed-control {
@@ -307,13 +376,46 @@
         cursor: pointer;
     }
 
-    .beat-display {
-        display: flex;
-        gap: 8px;
+    /* Floats independently of .video-panel, pinned to the bottom-right
+       corner of .sheet-pane-wrapper (absolute, same positioning context as
+       .video-panel - see its CSS) rather than the top, so it stays inside
+       the pane's own visible viewport at all times: on a short song
+       #sheetPane (and so the wrapper) shrinks to fit the content, which is
+       already fully on-screen with no scrolling; on a long song #sheetPane
+       hits its viewport-capped max-height and becomes internally
+       scrollable, and this being absolutely positioned against the
+       non-scrolling wrapper (not #sheetPane's own scrolling box) keeps it
+       fixed in the corner as that content scrolls underneath it, exactly
+       like .video-panel does. */
+    .beat-display-panel {
+        position: absolute;
+        bottom: 12px;
+        right: 12px;
+        width: 220px;
+        z-index: 10;
+        background: #fff;
+        border: 1px solid #eee;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+        padding: 8px 10px;
     }
 
+    /* Stretched with justify-content:space-between so the beat numbers
+       spread across the panel's full width. */
+    .beat-display {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+    }
+
+    /* line-height is fixed at the taller (active) size regardless of
+       which state a given number is in, so the row - and so
+       .beat-display-panel itself, which has no explicit height of its own
+       - never grows/shrinks as beats tick between active and inactive;
+       only font-size/color change. */
     .beat-num {
-        font-size: 14px;
+        font-size: 22px;
+        line-height: 32px;
         font-weight: 600;
         color: #ccc;
         min-width: 14px;
@@ -322,7 +424,13 @@
 
     .beat-num.beat-active {
         color: #1a73e8;
-        font-size: 18px;
+        font-size: 28px;
+    }
+
+    /* Only the "1" is clickable (see beatDisplay's click listener) - to
+       resync the standalone metronome's phase to this exact click. */
+    .beat-num[data-beat="1"] {
+        cursor: pointer;
     }
 
     .beat-num.beat-active.beat-downbeat {
@@ -342,7 +450,7 @@
         overflow-y: auto;
         background: #fff;
         border-radius: 8px;
-        padding: 14px;
+        padding: 14px 12px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
 
@@ -375,6 +483,84 @@
         margin-bottom: 10px;
     }
 
+    /* Floats over the top-right corner of #rawPane/#sheetPane (absolute,
+       positioned against .sheet-pane-wrapper) rather than sitting in
+       normal document flow, so it stays pinned in the corner as the sheet
+       scrolls underneath it instead of scrolling away. Deliberately
+       overlays whatever song text is underneath rather than reserving
+       space for itself - the sheet's own layout never shifts based on
+       whether a video is showing. A manual reference video (start it,
+       tap-tempo to the beat, then hit Scroll - see #tapTempoBtn) rather
+       than anything programmatically synced to playback. */
+    .video-panel {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 220px;
+        z-index: 10;
+        background: #fff;
+        border: 1px solid #eee;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+        padding: 10px 10px 8px;
+    }
+
+    #youtubeUrlInput {
+        width: 100%;
+        padding: 6px 8px;
+        font-size: 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        margin-top: 6px;
+        margin-bottom: 8px;
+    }
+
+    .video-embed-frame {
+        position: relative;
+        width: 100%;
+        padding-top: 56.25%;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #000;
+    }
+
+    .video-embed-frame iframe {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+    }
+
+    /* Custom playback-speed control (YouTube's own gear-icon speed menu
+       collapses/hides at this panel's small size) - see setPlaybackRate
+       calls in the script. */
+    .video-speed-control {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+        font-size: 11px;
+        color: #666;
+    }
+
+    .video-speed-control select {
+        flex: 1;
+        padding: 3px 4px;
+        font-size: 11px;
+    }
+
+    .video-speed-control input[type="range"] {
+        flex: 1;
+    }
+
+    .video-position-label {
+        min-width: 32px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+
     .simplify-toggle {
         display: flex;
         align-items: center;
@@ -383,8 +569,6 @@
         font-weight: 600;
         cursor: pointer;
         margin-bottom: 12px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #eee;
     }
 
     .legend-grid {
@@ -433,7 +617,7 @@
         padding: 10px 0;
     }
 
-    /* --- Rendered song sheet --- */
+    /* --- Rendered songsheet --- */
 
     .sheet-title {
         font-size: 24px;
@@ -547,23 +731,53 @@
         height: 16px;
     }
 
+    /* Shift-clicking the tick-marks row inserts a new chord there - see
+       insertChordAt - so the "+" affordance only shows there, not over the
+       chord names below, letting a click land precisely on a tick. */
+    #sheetPane.tags-editable .sheet-ticks {
+        cursor: copy;
+    }
+
     .chord-label {
         position: absolute;
         top: 0;
         font-weight: 700;
         color: #1a73e8;
         white-space: nowrap;
+        min-width: 0.6em;
+    }
+
+    /* A blanked-out chord (see deleteChordAt - the song's very first chord
+       can't be removed outright without shortening the song, so it's
+       emptied to a silent measure instead) has no text of its own to give
+       its label any width or click target, so show a placeholder dash. */
+    #sheetPane.tags-editable .chord-label:empty::before {
+        content: '\2013';
+        opacity: 0.4;
     }
 
     /* A chord's own {cpl_m:D} duration is only editable while viewing
-       "ChordPlayer" - #sheetPane gets this class then (see syncPaneDisplay). */
+       "ChordPlayer" - #sheetPane gets this class then (see syncPaneDisplay).
+       Also draggable there (left/right along its own line) to reorder it -
+       see wireChordLabelClicks/moveChordWithinLine. */
     #sheetPane.tags-editable .chord-label {
-        cursor: pointer;
+        cursor: grab;
         border-radius: 3px;
+        touch-action: none;
     }
 
     #sheetPane.tags-editable .chord-label:hover {
         background: #e8f0fe;
+    }
+
+    /* Actively being dragged (see the pointer handlers) - lifted above its
+       siblings and following the pointer horizontally via a live
+       translateX, so dropping it shows exactly where it'll land. */
+    #sheetPane.tags-editable .chord-label.dragging {
+        cursor: grabbing;
+        background: #e8f0fe;
+        z-index: 5;
+        opacity: 0.85;
     }
 
     /* The chord currently sounding during Scroll/Play Chords playback, and
@@ -652,6 +866,16 @@
 
     .duration-popup button:hover {
         background: #f0f0f0;
+    }
+
+    .duration-popup-delete {
+        margin-left: 4px;
+        color: #c0392b;
+        border-color: #e5b4ac;
+    }
+
+    .duration-popup-delete:hover {
+        background: #fdecea;
     }
 
     .save-dialog-overlay {
@@ -792,7 +1016,7 @@
            top of page 1 (confirmed by tracing the real PDF content
            stream's text-matrix math back to an exact pixel offset) - none
            of the earlier legend/SVG/positioning changes were it. */
-        .site-nav, .page-container > header, .input-section, .two-pane, #outputArea { display: none !important; }
+        .site-nav, .chordplayer-bar, .page-container > header, .two-pane, #outputArea { display: none !important; }
         .print-sheet { display: block !important; }
         body { background: #fff; }
 
@@ -871,62 +1095,74 @@
 </head>
 <body>
     <nav class="site-nav">
-        <a href="/">Chord Finder</a>
-        <a href="songsheet.html" class="active">Song Sheets</a>
+        <a href="songsheet.html" class="active">ChordPlayer</a>
+        <a href="/">ChordTutor</a>
     </nav>
 
     <div class="page-container">
         <header>
-            <h1>Song Sheets</h1>
-            <p>Paste ChordPro text, choose a file, or drop one below to render a formatted, printable song sheet.</p>
+            <h1>ChordPlayer</h1>
+            <p>Load a ChordPlayer or ChordPro file, or paste ChordPro text below, to render a formatted, printable, and scrollable playback songsheet.</p>
         </header>
+    </div>
 
-        <div class="input-section">
-            <div class="input-row">
-                <label class="file-btn" for="fileInput">Load Song&hellip;</label>
-                <input type="file" id="fileInput" accept=".pro,.cho,.chopro,.crd,.txt,.chordplayer">
-                <button class="render-btn" id="renderBtn">Render Song Sheet</button>
-                <button class="print-btn" id="printBtn">Print / Save as PDF</button>
-            </div>
-            <div class="input-hint">Supports standard ChordPro directives (title, artist, key, capo, verse/chorus/bridge, comments, tab blocks) and inline [Chord] markup. Once a song is rendered, "Source" is read-only; switch to "ChordPlayer" to edit timing tags (kept in memory only until saved) - click a chord in the song sheet to adjust its duration directly.</div>
-            <div class="source-view-toggle">
-                <label><input type="radio" name="sourceView" id="sourceViewSource" checked> Chordpro</label>
-                <label><input type="radio" name="sourceView" id="sourceViewTagged"> Chordplayer</label>
-                <div class="view-mode-toggle">
-                    <label><input type="radio" name="viewMode" id="viewModeRaw" checked> Raw</label>
-                    <label><input type="radio" name="viewMode" id="viewModeSheet"> Song Sheet</label>
-                </div>
-                <label class="print-diagrams-toggle"><input type="checkbox" id="printDiagramsCheck" checked disabled> Include chord diagrams in printout</label>
-                <div class="time-sig-control">
-                    <label for="timeSignatureSelect">Time</label>
-                    <select id="timeSignatureSelect">
-                        <option value="4" selected>4/4</option>
-                        <option value="3">3/4</option>
-                        <option value="2">2/4</option>
-                        <option value="6">6/8</option>
-                        <option value="12">12/8</option>
-                    </select>
-                </div>
-                <div class="chord-duration-control">
-                    <label for="chordDurationSelect">Auto chord duration</label>
-                    <select id="chordDurationSelect">
-                        <option value="1" selected>Full Measure</option>
-                        <option value="0.5">Half measure</option>
-                        <option value="0.25">Quarter measure</option>
-                    </select>
-                </div>
+    <div class="chordplayer-bar">
+        <div class="settings-row">
+            <label class="file-btn" for="fileInput">Load Song File</label>
+            <input type="file" id="fileInput" accept=".pro,.cho,.chopro,.crd,.txt,.chordplayer">
+            <button class="print-btn" id="clearSongBtn">Clear Song</button>
+            <div class="settings-actions">
+                <button class="print-btn" id="saveBtn">Save ChordPlayer</button>
+                <button class="print-btn" id="printBtn">Print / Save PDF</button>
+                <label class="print-diagrams-toggle"><input type="checkbox" id="printDiagramsCheck" checked disabled> Print diagrams</label>
             </div>
         </div>
+        <div class="settings-row">
+            <div class="segmented">
+                <label><input type="radio" name="sourceView" id="sourceViewTagged" checked> Chordplayer</label>
+                <label><input type="radio" name="sourceView" id="sourceViewSource"> Chordpro</label>
+            </div>
+            <div class="segmented">
+                <label><input type="radio" name="viewMode" id="viewModeSheet"> Sheet</label>
+                <label><input type="radio" name="viewMode" id="viewModeRaw"> Raw</label>
+            </div>
+            <div class="time-sig-control">
+                <label for="timeSignatureSelect">Time</label>
+                <select id="timeSignatureSelect">
+                    <option value="4" selected>4/4</option>
+                    <option value="3">3/4</option>
+                    <option value="2">2/4</option>
+                    <option value="6">6/8</option>
+                    <option value="12">12/8</option>
+                </select>
+            </div>
+            <div class="chord-duration-control">
+                <label for="chordDurationSelect">Auto chord duration</label>
+                <select id="chordDurationSelect">
+                    <option value="8">Eight Measures</option>
+                    <option value="6">Six Measures</option>
+                    <option value="4">Four Measures</option>
+                    <option value="2">Two Measures</option>
+                    <option value="1" selected>Full Measure</option>
+                    <option value="0.5">Half measure</option>
+                    <option value="0.25">Quarter measure</option>
+                </select>
+            </div>
+        </div>
+    </div>
 
+    <div class="page-container">
         <div id="outputArea">
             <div id="durationPopup" class="duration-popup" style="display:none">
                 <input type="text" class="duration-popup-chord" id="durationPopupChord" autocomplete="off" spellcheck="false">
                 <button type="button" id="durationPopupMinus">&minus;</button>
                 <span class="duration-popup-value" id="durationPopupValue"></span>
                 <button type="button" id="durationPopupPlus">+</button>
+                <button type="button" class="duration-popup-delete" id="durationPopupDelete" title="Delete this chord">&times;</button>
             </div>
             <div class="two-pane">
-                <textarea class="sheet-pane" id="chordproInput" placeholder="Paste ChordPro text here, or drag a .pro/.cho file onto this box&hellip;
+                <div class="sheet-pane-wrapper">
+                    <textarea class="sheet-pane" id="rawPane" placeholder="Paste ChordPro text here, or drag a .pro/.cho file onto this box&hellip;
 
 {title: Example Song}
 {artist: Someone}
@@ -935,9 +1171,45 @@
 {start_of_verse}
 [G]Amazing [C]grace how [G]sweet the sound
 {end_of_verse}"></textarea>
-                <div class="sheet-pane" id="sheetPane" style="display:none"></div>
+                    <div class="sheet-pane" id="sheetPane" style="display:none"></div>
+                    <div class="video-panel" id="videoPanel">
+                        <label for="youtubeUrlInput" class="legend-title" style="margin-bottom:0">Video</label>
+                        <input type="text" id="youtubeUrlInput" placeholder="Paste a YouTube URL…">
+                        <div class="video-embed-frame" id="videoEmbedFrame" style="display:none">
+                            <div id="videoEmbedIframe"></div>
+                        </div>
+                        <div class="video-speed-control" id="videoPositionControl" style="display:none">
+                            <label for="videoPositionSlider">Pos</label>
+                            <input type="range" id="videoPositionSlider" min="0" max="0" step="1" value="0">
+                            <span id="videoPositionLabel" class="video-position-label">0:00</span>
+                        </div>
+                        <div class="video-speed-control" id="videoVolumeControl" style="display:none">
+                            <label for="videoVolumeSlider">Vol</label>
+                            <input type="range" id="videoVolumeSlider" min="0" max="100" step="1" value="100">
+                        </div>
+                        <div class="video-speed-control" id="videoSpeedControl" style="display:none">
+                            <label for="videoSpeedSelect">Speed</label>
+                            <select id="videoSpeedSelect">
+                                <option value="0.25">0.25x</option>
+                                <option value="0.5">0.5x</option>
+                                <option value="0.75">0.75x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="1.25">1.25x</option>
+                                <option value="1.5">1.5x</option>
+                                <option value="2">2x</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="beat-display-panel" id="beatDisplayPanel" style="display:none">
+                        <div class="beat-display" id="beatDisplay"></div>
+                    </div>
+                </div>
                 <div class="legend-pane">
                     <label class="simplify-toggle"><input type="checkbox" id="simplifyToggle"> Simplify chords</label>
+                    <div class="legend-controls">
+                        <label class="simplify-toggle"><input type="checkbox" id="legendShowNotes"> Note Names</label>
+                        <label class="simplify-toggle"><input type="checkbox" id="legendShowIntervals"> Notes/Intervals</label>
+                    </div>
                     <div id="legendPane"></div>
                 </div>
             </div>
@@ -969,30 +1241,66 @@
     </div>
 
     <div class="player-bar" id="playerBar">
-        <button class="player-btn" id="scrollToggleBtn">&#9654; Scroll</button>
-        <button class="player-btn" id="topBtn">&#8593; Top</button>
-        <div class="speed-control">
-            <label for="bpmSlider">Tempo</label>
-            <input type="range" id="bpmSlider" min="20" max="200" step="1" value="80">
-            <span id="bpmLabel">80 BPM</span>
+        <div class="player-bar-row">
+            <button class="player-btn player-stack-btn" id="topBtn">&#8593; Top</button>
+            <div class="speed-control">
+                <label for="bpmSlider">Tempo</label>
+                <input type="range" id="bpmSlider" min="20" max="200" step="1" value="80">
+                <button type="button" class="player-btn" id="tapTempoBtn">Tap</button>
+                <span id="bpmLabel">80 BPM</span>
+            </div>
+            <button type="button" class="player-btn" id="metronomePlayBtn">&#9654;</button>
+            <div class="chord-duration-control">
+                <label for="metronomeVolumeSlider">Metronome Vol</label>
+                <input type="range" id="metronomeVolumeSlider" min="0" max="100" step="5" value="70">
+            </div>
         </div>
-        <label class="metronome-toggle"><input type="checkbox" id="metronomeToggle" checked> Metronome</label>
-        <label class="play-chords-toggle"><input type="checkbox" id="playChordsToggle"> Play chords</label>
-        <div class="beat-display" id="beatDisplay"></div>
-        <button class="player-btn" id="saveBtn">Save</button>
-        <div class="legend-controls">
-            <label><input type="checkbox" id="legendShowNotes"> Note Names</label>
-            <label><input type="checkbox" id="legendShowIntervals"> Notes/Intervals</label>
+        <div class="player-bar-row">
+            <button class="player-btn player-stack-btn" id="scrollToggleBtn">&#9654; Scroll</button>
+            <div class="chord-duration-control">
+                <label for="toneSelect">Instrument</label>
+                <select id="toneSelect">
+                    <optgroup label="Acoustic">
+                        <option value="acoustic-warm" selected>Warm</option>
+                        <option value="acoustic-bright">Bright</option>
+                    </optgroup>
+                    <optgroup label="Electric">
+                        <option value="electric-clean">Clean</option>
+                        <option value="electric-crunch">Crunch</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="chord-duration-control">
+                <label for="strumPatternSelect">Strum</label>
+                <select id="strumPatternSelect">
+                    <option value="single" selected>Single Chord Strum</option>
+                    <option value="quarter">Quarter Note Strum</option>
+                    <option value="alternate">Alternate Strum</option>
+                    <option value="basic">Basic Strumming</option>
+                    <option value="best">Best Strum</option>
+                </select>
+            </div>
+            <div class="chord-duration-control">
+                <label for="accentContrastSlider">Ghost Strum Vol</label>
+                <input type="range" id="accentContrastSlider" min="10" max="100" step="5" value="25">
+            </div>
+            <label class="play-chords-toggle"><input type="checkbox" id="playChordsToggle"> Play chords</label>
+            <div class="chord-duration-control">
+                <label for="chordVolumeSlider">Chord Vol</label>
+                <input type="range" id="chordVolumeSlider" min="0" max="100" step="5" value="100">
+            </div>
+            <label class="metronome-toggle"><input type="checkbox" id="metronomeToggle" checked> Metronome</label>
         </div>
     </div>
 
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script src="chord-data.js"></script>
     <script>
         // --- ChordPro parsing ---
 
         function parseChordPro(text) {
             const lines = text.split(/\r?\n/);
-            const song = { title: '', subtitle: '', artist: '', key: '', capo: '', time: '', tempo: '', sections: [] };
+            const song = { title: '', subtitle: '', artist: '', key: '', capo: '', time: '', tempo: '', videoUrl: '', sections: [] };
             let currentSection = { type: 'verse', label: null, lines: [] };
             let inTab = false;
             // {cpl_m:D} tags (inline, immediately before a chord bracket) set
@@ -1027,6 +1335,7 @@
                         case 'capo': song.capo = val; break;
                         case 'time': song.time = val; break;
                         case 'tempo': song.tempo = val; break;
+                        case 'cpl_v': song.videoUrl = val; break;
                         case 'comment': case 'c': case 'comment_italic': case 'ci':
                             currentSection.lines.push({ type: 'comment', text: val });
                             break;
@@ -1647,6 +1956,9 @@
                 for (const line of section.lines) {
                     if (line.type !== 'line') continue;
                     for (const c of line.chords) {
+                        // A blanked/silent chord (see deleteChordAt) has no
+                        // real name to show a diagram for.
+                        if (!c.chord) continue;
                         if (!seen.has(c.chord)) {
                             seen.add(c.chord);
                             names.push(c.chord);
@@ -1681,7 +1993,7 @@
         // (what was pasted/dropped/chosen - never edited in place) and
         // `chordPlayerText` (a working copy seeded from it via
         // buildTaggedChordPro, editable when "With Time Tags" is selected).
-        // The single #chordproInput box always displays whichever buffer the
+        // The single #rawPane box always displays whichever buffer the
         // sourceView radio currently selects, read-only for Source, editable
         // for With Time Tags; edits only ever touch chordPlayerText.
         // `sourceLoaded` gates that read-only lock - before any song has been
@@ -1690,6 +2002,14 @@
         let chordPlayerText = '';
         let tagsDirty = false;
         let sourceLoaded = false;
+
+        // Play Chords is only ever meaningful in ChordPlayer+Sheet mode
+        // (see syncPaneDisplay, which disables it everywhere else) - its
+        // checked state there is remembered across mode switches, rather
+        // than forgotten every time the reader steps away to Chordpro/Raw
+        // and back - see restorePlayChordsForMode and the playChordsToggle
+        // 'change' listener that keeps it updated.
+        let lastPlayChordsInSheetMode = true;
 
         // Save feature - filename/handle bookkeeping. Handles are
         // FileSystemFileHandles (Chrome/Edge only, via drag-drop load or a
@@ -1748,7 +2068,7 @@
             updatePrintOutput(songHTML);
         }
 
-        // Print mirrors whichever view (Raw vs Song Sheet) is currently on
+        // Print mirrors whichever view (Raw vs Songsheet) is currently on
         // screen, independent of what's shown live - Raw always prints a
         // plain monospace dump of the active buffer with no legend; Song
         // Sheet prints the same formatted HTML shown on screen, with the
@@ -1770,8 +2090,33 @@
             }
         }
 
-        // Shows/locks #chordproInput per the sourceView toggle, and picks
-        // which of #chordproInput (Raw) / #sheetPane (Song Sheet) is
+        // Sizes #rawPane/#sheetPane (the shared .sheet-pane slot) to
+        // exactly whatever vertical space actually exists between
+        // .chordplayer-bar and .player-bar, via the --pane-height
+        // custom property both consume (see their CSS) - rather than a
+        // hardcoded calc(100vh - Npx) guess, which drifts stale every time
+        // the layout above/below the pane changes. .chordplayer-bar'
+        // own height and the (scroll-independent) gap between it and
+        // .two-pane are measured directly; .player-bar is position:fixed,
+        // so its height is simply subtracted from the viewport regardless
+        // of scroll position, but only while it's actually visible (a song
+        // hasn't been loaded yet on first render).
+        function updateSheetPaneHeight() {
+            const settingsBar = document.querySelector('.chordplayer-bar');
+            const twoPane = document.querySelector('.two-pane');
+            const playerBar = document.getElementById('playerBar');
+            if (!settingsBar || !twoPane) return;
+            const settingsRect = settingsBar.getBoundingClientRect();
+            const gap = twoPane.getBoundingClientRect().top - settingsRect.bottom;
+            const playerBarHeight = playerBar.classList.contains('visible') ? playerBar.getBoundingClientRect().height : 0;
+            const available = window.innerHeight - settingsRect.height - gap - playerBarHeight;
+            document.documentElement.style.setProperty('--pane-height', Math.max(200, Math.round(available)) + 'px');
+        }
+        window.addEventListener('resize', updateSheetPaneHeight);
+        updateSheetPaneHeight();
+
+        // Shows/locks #rawPane per the sourceView toggle, and picks
+        // which of #rawPane (Raw) / #sheetPane (Songsheet) is
         // visible - the two sit in the same slot in .two-pane and are
         // simply toggled against each other - without touching either
         // in-memory buffer. Play-along chord audio requires an actual
@@ -1783,12 +2128,17 @@
         function syncPaneDisplay() {
             const showTagged = document.getElementById('sourceViewTagged').checked;
             const showSheet = sourceLoaded && document.getElementById('viewModeSheet').checked;
-            const box = document.getElementById('chordproInput');
+            const box = document.getElementById('rawPane');
             box.value = showTagged ? chordPlayerText : chordProText;
             box.readOnly = sourceLoaded && !showTagged;
             box.style.display = showSheet ? 'none' : '';
             document.getElementById('sheetPane').style.display = showSheet ? '' : 'none';
             document.getElementById('printDiagramsCheck').disabled = !showSheet;
+            // The visual metronome only makes sense against the rendered
+            // Sheet view (with its chord/rhythm markers) - hide it while
+            // viewing raw ChordPro text instead of leaving it floating
+            // over an unrelated pane.
+            document.getElementById('beatDisplayPanel').style.display = showSheet ? '' : 'none';
 
             const playChords = document.getElementById('playChordsToggle');
             playChords.disabled = !showTagged;
@@ -1799,9 +2149,10 @@
         }
 
         // Parses and renders whichever buffer the sourceView toggle currently
-        // selects - "Render Song Sheet" and every option toggle (mark time,
-        // chord duration, simplify) go through this, so the sheet always
-        // reflects the visible pane, including any pending tagged-text edits.
+        // selects - every option toggle (view mode, chord duration,
+        // simplify) goes through this once a song is loaded, so the sheet
+        // always reflects the visible pane, including any pending
+        // tagged-text edits.
         function renderActive() {
             if (!sourceLoaded) return;
             const showTagged = document.getElementById('sourceViewTagged').checked;
@@ -1836,14 +2187,20 @@
             renderActive();
         }
 
-        // Loads a brand new song (paste/drop/file-choose, or the first-ever
-        // Render click before any song is loaded), replacing both buffers.
-        // Confirms first if there are unsaved tagged-text edits, since this
-        // discards them.
-        function loadNewSource(text, meta) {
-            if (!text || !text.trim()) return;
+        // Parses a brand new song (paste/drop/file-choose) into both
+        // buffers and marks it loaded - everything a fresh load needs
+        // EXCEPT which view to actually show it in, which callers decide
+        // for themselves (see loadNewSource vs the Sheet/Raw "convert on
+        // first choice" handler below) - a file/drop load always wants the
+        // Sheet+Chordplayer defaults, but choosing Raw as your very first
+        // action should convert into Raw, not bounce you to Sheet. Confirms
+        // first if there are unsaved tagged-text edits, since this
+        // discards them. Returns false (and does nothing) if there's
+        // nothing to load or the user cancels that confirmation.
+        function ingestSource(text, meta) {
+            if (!text || !text.trim()) return false;
             if (tagsDirty && !confirm('You have unsaved edits in "With Time Tags" that will be lost. Load this new file anyway?')) {
-                return;
+                return false;
             }
 
             sourceFileName = (meta && meta.fileName) || null;
@@ -1875,14 +2232,202 @@
             }
             tagsDirty = false;
             sourceLoaded = true;
-            document.getElementById('sourceViewSource').checked = true;
-            document.getElementById('viewModeSheet').checked = true;
+            document.getElementById('playChordsToggle').checked = true;
+            lastPlayChordsInSheetMode = true;
             resumePointChord = null;
+            return true;
+        }
 
+        // Matches a YouTube watch/share/embed URL anywhere in the song text
+        // (lyrics line, comment, wherever) and captures the 11-char video ID -
+        // see detectAndLoadVideoUrl/updateVideoEmbed below. This is a purely
+        // manual reference video (start it, tap-tempo to the beat with
+        // #tapTempoBtn, then hit Scroll) - there's no programmatic sync to
+        // playback, since YouTube's embed API exposes no way to read back a
+        // song's actual tempo/beat grid.
+        const YOUTUBE_ID_REGEX = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/i;
+
+        function extractYouTubeId(text) {
+            if (!text) return null;
+            const m = text.match(YOUTUBE_ID_REGEX);
+            return m ? m[1] : null;
+        }
+
+        // YT.Player instance backing #videoEmbedIframe, once the IFrame API
+        // script (loaded via <script src="https://www.youtube.com/iframe_api">)
+        // has called window.onYouTubeIframeAPIReady and the player's been
+        // constructed. Using the real Player API (rather than a bare
+        // <iframe src="...embed/ID">) is what makes setPlaybackRate below
+        // possible - the panel is too small for YouTube's own gear-icon
+        // speed menu to appear, so #videoSpeedSelect drives it directly.
+        let ytPlayer = null;
+        let ytApiReady = false;
+        let pendingVideoId = null;
+
+        // That script is commonly blocked outright by ad-blockers/privacy
+        // extensions (it's served from youtube.com, a frequent blocklist
+        // target) - if onYouTubeIframeAPIReady never fires within
+        // YT_API_TIMEOUT_MS of requesting a video, give up waiting and
+        // fall back to a plain, uncontrollable <iframe src="...embed/ID">
+        // (see loadVideoAsPlainEmbed) so the video is still watchable, just
+        // without the Speed dropdown. Once tripped, every subsequent video
+        // load uses the fallback directly rather than re-waiting.
+        let useFallbackEmbed = false;
+        const YT_API_TIMEOUT_MS = 4000;
+
+        // Custom seek/position slider - YouTube's own progress bar inside
+        // the embed is too fiddly to grab precisely at this panel's small
+        // size. #videoPositionSlider's range is set to the video's actual
+        // duration (known once onReady fires) and kept in sync with
+        // playback by polling getCurrentTime() - only while the user isn't
+        // actively dragging it, so a poll tick doesn't yank the handle back
+        // out from under an in-progress drag.
+        let videoPositionInterval = null;
+        let videoPositionDragging = false;
+
+        function formatVideoTime(seconds) {
+            const s = Math.max(0, Math.floor(seconds));
+            return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+        }
+
+        function startVideoPositionPolling() {
+            stopVideoPositionPolling();
+            videoPositionInterval = setInterval(() => {
+                if (!ytPlayer || videoPositionDragging) return;
+                const duration = ytPlayer.getDuration();
+                const slider = document.getElementById('videoPositionSlider');
+                if (duration > 0) slider.max = Math.floor(duration);
+                slider.value = Math.floor(ytPlayer.getCurrentTime());
+                document.getElementById('videoPositionLabel').textContent = formatVideoTime(ytPlayer.getCurrentTime());
+            }, 500);
+        }
+
+        function stopVideoPositionPolling() {
+            if (videoPositionInterval) {
+                clearInterval(videoPositionInterval);
+                videoPositionInterval = null;
+            }
+        }
+
+        function onYouTubeIframeAPIReady() {
+            ytApiReady = true;
+            if (pendingVideoId) {
+                const id = pendingVideoId;
+                pendingVideoId = null;
+                loadVideoIntoPlayer(id);
+            }
+        }
+
+        function loadVideoIntoPlayer(id) {
+            if (ytPlayer) {
+                ytPlayer.loadVideoById(id);
+                return;
+            }
+            ytPlayer = new YT.Player('videoEmbedIframe', {
+                videoId: id,
+                // origin must match the page's own origin exactly, or the
+                // player's postMessage bridge fails auth and playback
+                // silently refuses to start (getVideoData().errorCode
+                // 'auth', isPlayable false) even though the iframe itself
+                // loads fine.
+                playerVars: { rel: 0, origin: window.location.origin },
+                events: {
+                    onReady: () => {
+                        document.getElementById('videoSpeedControl').style.display = '';
+                        document.getElementById('videoSpeedSelect').value = '1';
+                        ytPlayer.setPlaybackRate(1);
+                        document.getElementById('videoVolumeControl').style.display = '';
+                        ytPlayer.setVolume(parseInt(document.getElementById('videoVolumeSlider').value, 10));
+                        document.getElementById('videoPositionControl').style.display = '';
+                        startVideoPositionPolling();
+                    },
+                },
+            });
+        }
+
+        function loadVideoAsPlainEmbed(id) {
+            const container = document.getElementById('videoEmbedIframe');
+            container.innerHTML = '';
+            const iframe = document.createElement('iframe');
+            iframe.src = 'https://www.youtube.com/embed/' + id;
+            iframe.allow = 'autoplay; encrypted-media';
+            iframe.allowFullscreen = true;
+            container.appendChild(iframe);
+            document.getElementById('videoSpeedControl').style.display = 'none';
+            // A plain <iframe> has no JS handle to control volume/position
+            // with - only the JS-API-backed player (above) can drive these.
+            document.getElementById('videoVolumeControl').style.display = 'none';
+            document.getElementById('videoPositionControl').style.display = 'none';
+            stopVideoPositionPolling();
+        }
+
+        // Reflects whatever's currently in #youtubeUrlInput into the embed
+        // player - shows/hides the frame based on whether the field holds
+        // a recognizable YouTube URL. The Speed control's own visibility is
+        // handled by whichever load path actually runs (JS-API-backed
+        // player vs. plain-embed fallback), not here.
+        function updateVideoEmbed() {
+            const id = extractYouTubeId(document.getElementById('youtubeUrlInput').value);
+            const frame = document.getElementById('videoEmbedFrame');
+            if (id) {
+                frame.style.display = '';
+                if (useFallbackEmbed) {
+                    loadVideoAsPlainEmbed(id);
+                } else if (ytApiReady) {
+                    loadVideoIntoPlayer(id);
+                } else {
+                    document.getElementById('videoSpeedControl').style.display = 'none';
+                    document.getElementById('videoVolumeControl').style.display = 'none';
+                    document.getElementById('videoPositionControl').style.display = 'none';
+                    pendingVideoId = id;
+                    setTimeout(() => {
+                        if (!ytApiReady && pendingVideoId === id) {
+                            useFallbackEmbed = true;
+                            pendingVideoId = null;
+                            loadVideoAsPlainEmbed(id);
+                        }
+                    }, YT_API_TIMEOUT_MS);
+                }
+            } else {
+                frame.style.display = 'none';
+                document.getElementById('videoSpeedControl').style.display = 'none';
+                document.getElementById('videoVolumeControl').style.display = 'none';
+                document.getElementById('videoPositionControl').style.display = 'none';
+                stopVideoPositionPolling();
+                pendingVideoId = null;
+                if (ytPlayer) ytPlayer.stopVideo();
+            }
+        }
+
+        // Auto-fills the YouTube URL field for the just-loaded song -
+        // editable afterward, and cleared out if the new song has neither
+        // source (so a previous song's video doesn't linger against the
+        // wrong song). Prefers the song's own {cpl_v:} tag (see
+        // parseChordPro/buildPatchedSource) when present; falls back to
+        // scanning the raw lyrics/comments for a bare YouTube link, for
+        // songs saved before this tag existed.
+        function detectAndLoadVideoUrl(text) {
+            const taggedUrl = (currentSong && currentSong.videoUrl) ? currentSong.videoUrl.trim() : '';
+            if (taggedUrl) {
+                document.getElementById('youtubeUrlInput').value = taggedUrl;
+            } else {
+                const id = extractYouTubeId(text);
+                document.getElementById('youtubeUrlInput').value = id ? ('https://www.youtube.com/watch?v=' + id) : '';
+            }
+            updateVideoEmbed();
+        }
+
+        // Renders the just-ingested song and syncs every control that
+        // depends on it - shared tail of loadNewSource and the Sheet/Raw
+        // first-choice handler, once each has settled which view/source
+        // radios should be checked.
+        function finishLoad() {
             renderActive();
 
             document.getElementById('playerBar').classList.add('visible');
-            document.title = (currentSong.title ? currentSong.title + ' — ' : '') + 'ChordPlayer Song Sheets';
+            updateSheetPaneHeight();
+            document.title = (currentSong.title ? currentSong.title + ' — ' : '') + 'ChordPlayer';
+            detectAndLoadVideoUrl(chordProText);
 
             // Sync the tempo/time-signature controls to the file's own
             // metadata, if it specified any.
@@ -1907,6 +2452,61 @@
             document.getElementById('sheetPane').scrollTop = 0;
         }
 
+        // Loads a brand new song from a file/drop/file-choose - always
+        // resets to the Sheet+Chordplayer defaults, since there's no
+        // existing view choice to respect yet.
+        function loadNewSource(text, meta) {
+            if (!ingestSource(text, meta)) return;
+            document.getElementById('sourceViewTagged').checked = true;
+            document.getElementById('viewModeSheet').checked = true;
+            finishLoad();
+        }
+
+        // Resets everything back to the pre-load "empty paste box" state -
+        // so pasting something new afterward reads as starting fresh,
+        // rather than editing whatever was loaded before. Confirms first
+        // if there are unsaved tagged-text edits, same as loading over top
+        // of them would.
+        function clearSong() {
+            if (tagsDirty && !confirm('You have unsaved edits in "With Time Tags" that will be lost. Clear the loaded song anyway?')) {
+                return;
+            }
+            haltPlayback();
+
+            currentSong = null;
+            currentChordNames = [];
+            currentLineTimings = [];
+            currentChordScheduleFull = [];
+            chordProText = '';
+            chordPlayerText = '';
+            tagsDirty = false;
+            sourceLoaded = false;
+            sourceFileName = null;
+            sourceIsCpl = false;
+            proFileHandle = null;
+            cplFileHandle = null;
+            resumePointChord = null;
+            songFinished = false;
+            songElapsedMeasures = 0;
+            scrollStartMeasure = 0;
+
+            document.getElementById('rawPane').value = '';
+            document.getElementById('sheetPane').innerHTML = '';
+            document.getElementById('legendPane').innerHTML = '';
+            document.getElementById('viewModeSheet').checked = false;
+            document.getElementById('viewModeRaw').checked = false;
+            document.getElementById('sourceViewTagged').checked = true;
+            document.getElementById('playChordsToggle').checked = false;
+            document.getElementById('playerBar').classList.remove('visible');
+            document.title = 'ChordPlayer';
+            document.getElementById('youtubeUrlInput').value = '';
+            updateVideoEmbed();
+
+            updateSheetPaneHeight();
+            syncPaneDisplay();
+            updateResumeFlashDOM();
+        }
+
         // --- Save ---
         //
         // Patches {time:}/{tempo:} into a copy of a buffer without
@@ -1926,7 +2526,7 @@
                 lines[idx] = newLine;
                 return lines.join('\n');
             }
-            const headerRe = /^\{(title|t|subtitle|st|artist|key|capo|time|tempo)(?::.*)?\}$/i;
+            const headerRe = /^\{(title|t|subtitle|st|artist|key|capo|time|tempo|cpl_v)(?::.*)?\}$/i;
             let insertAt = 0;
             for (let i = 0; i < lines.length; i++) {
                 const trimmed = lines[i].trim();
@@ -1935,6 +2535,16 @@
             }
             lines.splice(insertAt, 0, newLine);
             return lines.join('\n');
+        }
+
+        // Companion to upsertDirective, for a directive that should be
+        // dropped entirely rather than written with an empty value - used
+        // when the YouTube URL field is cleared, so a stale {cpl_v:} tag
+        // doesn't linger in the saved file pointing at a video that's no
+        // longer set.
+        function removeDirective(text, name) {
+            const directiveRe = new RegExp(`^\\{${name}(?::.*)?\\}$`, 'i');
+            return text.split(/\r?\n/).filter(l => !directiveRe.test(l.trim())).join('\n');
         }
 
         function getTimeSignatureLabel() {
@@ -1953,19 +2563,27 @@
             return text.replace(/\{cpl_m:\s*[^}]*\}/gi, '');
         }
 
+        // Patches the current YouTube URL field into a copy of `text` as a
+        // {cpl_v:} directive (or strips any existing one if the field's
+        // empty) - shared tail of buildPatchedSource/buildPatchedTagged.
+        function patchVideoUrl(text) {
+            const videoUrl = document.getElementById('youtubeUrlInput').value.trim();
+            return videoUrl ? upsertDirective(text, 'cpl_v', videoUrl) : removeDirective(text, 'cpl_v');
+        }
+
         function buildPatchedSource() {
             // chordProText is already the plain/untagged buffer even
             // for a .chordplayer load (stripped at load time - see
-            // loadNewSource) - just patch time/tempo on top of it.
+            // loadNewSource) - just patch time/tempo/video on top of it.
             let text = upsertDirective(chordProText, 'time', getTimeSignatureLabel());
             text = upsertDirective(text, 'tempo', document.getElementById('bpmSlider').value);
-            return text;
+            return patchVideoUrl(text);
         }
 
         function buildPatchedTagged() {
             let text = upsertDirective(chordPlayerText, 'time', getTimeSignatureLabel());
             text = upsertDirective(text, 'tempo', document.getElementById('bpmSlider').value);
-            return text;
+            return patchVideoUrl(text);
         }
 
         // Basename shared by both saved files - the loaded file's own name
@@ -2141,18 +2759,12 @@
             if (e.target.id === 'saveDialogOverlay') closeSaveDialog();
         });
 
-        document.getElementById('renderBtn').addEventListener('click', () => {
-            if (!sourceLoaded) {
-                loadNewSource(document.getElementById('chordproInput').value);
-            } else {
-                renderActive();
-            }
-        });
-
         document.getElementById('printBtn').addEventListener('click', () => {
             stopScrolling();
             window.print();
         });
+
+        document.getElementById('clearSongBtn').addEventListener('click', clearSong);
 
         // --- Auto-scroll player ---
         //
@@ -2234,9 +2846,21 @@
         const PLAYBACK_STRUM_DELAY = 0.025;
         const PLAYBACK_NOTE_DURATION = 3.2;
 
-        function playChordByName(name) {
+        function getSelectedTone() {
+            return document.getElementById('toneSelect').value;
+        }
+
+        function getNonAccentVolume() {
+            return parseFloat(document.getElementById('accentContrastSlider').value) / 100;
+        }
+
+        function getChordVolume() {
+            return parseFloat(document.getElementById('chordVolumeSlider').value) / 100;
+        }
+
+        function playChordByName(name, direction = 'down', accent = false) {
             const voicing = chordNameIndex[name] || chordNameIndex[normalizeChordName(name)];
-            if (voicing) playChord(voicing[1], PLAYBACK_STRUM_DELAY, PLAYBACK_NOTE_DURATION);
+            if (voicing) playChord(voicing[1], PLAYBACK_STRUM_DELAY, PLAYBACK_NOTE_DURATION, direction, getSelectedTone(), accent, getNonAccentVolume(), getChordVolume());
         }
 
         // Maps each rendered line's [measureStart, measureEnd) span to its
@@ -2374,12 +2998,12 @@
 
             const sheetPane = document.getElementById('sheetPane');
             // What's visible right now (wherever the reader has scrolled
-            // the sheet to) determines when scrolling should start: 10
+            // the sheet to) determines when scrolling should start: 30
             // measures before the last one currently in view, so there's
             // always a few measures of lead-in left on screen when the
             // sheet begins moving.
             const lastVisibleMeasure = Math.floor(measureForPixelY(sheetPane.scrollTop + sheetPane.clientHeight));
-            scrollStartMeasure = Math.max(0, lastVisibleMeasure - 10);
+            scrollStartMeasure = Math.max(0, lastVisibleMeasure - 30);
             setScrollJumpCorrection(scrollStartMeasure);
 
             const lastLineMeasure = currentMeasurePixelMap.length
@@ -2402,6 +3026,7 @@
             document.getElementById('scrollToggleBtn').innerHTML = '&#9654; Scroll';
             stopMetronome();
             clearChordHighlight();
+            stopAllChordAudio();
             updateResumeFlashDOM();
         }
 
@@ -2539,6 +3164,30 @@
         let metronomeTickCount = 0; // absolute tick count since Scroll was pressed
         let countInTicks = 0; // ticks that make up the count-in (1 measure)
 
+        // Strum patterns: 8 eighth-note slots per 4/4 measure, "1 + 2 + 3 + 4 +".
+        // 'D' = down strum (all fretted/open strings, low to high), 'U' = up
+        // strum (highest 2-3 fretted/open strings, high to low), '-' = rest.
+        // Only defined for 4/4 - see beatsPerMeasure guard in metronomeTick.
+        // 'single' has no grid: it's today's original behavior (one strum on
+        // chord change, one re-strum per measure while a chord sustains).
+        const STRUM_PATTERNS = {
+            single: { slots: null },
+            quarter: { slots: ['D', '-', 'D', '-', 'D', '-', 'D', '-'] },
+            alternate: { slots: ['D', 'U', 'D', 'U', 'D', 'U', 'D', 'U'] },
+            basic: { slots: ['D', '-', 'D', 'U', 'D', 'U', 'D', '-'] },
+            best: { slots: ['D', '-', 'D', 'U', '-', 'U', 'D', 'U'] },
+        };
+
+        // Up-strum audio scheduled via setTimeout for the "+" off-beats (see
+        // metronomeTick) - must be cancelled on Stop, same as the metronome
+        // interval itself, or an up-strum can fire audibly after playback has
+        // already been stopped.
+        let pendingStrumTimeouts = [];
+        function clearPendingStrumTimeouts() {
+            pendingStrumTimeouts.forEach(t => clearTimeout(t));
+            pendingStrumTimeouts = [];
+        }
+
         function getBeatsPerMeasure() {
             return parseInt(document.getElementById('timeSignatureSelect').value, 10);
         }
@@ -2549,9 +3198,17 @@
         // noise burst for the stick-attack transient. Beat 1 gets a lower,
         // bigger, louder tom; beats 2-4 get a higher, smaller one - cuts through
         // a strummed guitar mix better than a low kick drum would.
+        function getMetronomeVolume() {
+            return parseInt(document.getElementById('metronomeVolumeSlider').value, 10) / 100;
+        }
+
         function playMetronomeClick(isDownbeat) {
             const ctx = getAudioContext();
             const now = ctx.currentTime;
+            // exponentialRampToValueAtTime (below) throws if it ever has to
+            // ramp from/to a literal 0, so floor at a value quiet enough to
+            // read as silent instead of clamping to exactly 0.
+            const volume = Math.max(getMetronomeVolume(), 0.0001);
 
             const basePitch = isDownbeat ? 60 : 100;
             const duration = isDownbeat ? 0.3 : 0.22;
@@ -2566,7 +3223,7 @@
             lowpass.frequency.value = isDownbeat ? 350 : 500;
 
             const gain = ctx.createGain();
-            gain.gain.setValueAtTime(isDownbeat ? 0.5 : 0.4, now);
+            gain.gain.setValueAtTime((isDownbeat ? 0.5 : 0.4) * volume, now);
             gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
             osc.connect(lowpass);
@@ -2589,7 +3246,7 @@
             noiseFilter.type = 'bandpass';
             noiseFilter.frequency.value = 1500;
             const noiseGain = ctx.createGain();
-            noiseGain.gain.setValueAtTime(0.15, now);
+            noiseGain.gain.setValueAtTime(0.15 * volume, now);
             noiseSource.connect(noiseFilter);
             noiseFilter.connect(noiseGain);
             noiseGain.connect(ctx.destination);
@@ -2604,7 +3261,12 @@
                     classes.push('beat-active');
                     if (i === 1) classes.push('beat-downbeat');
                 }
-                html += `<span class="${classes.join(' ')}">${i}</span>`;
+                // data-beat identifies the "1" for the click-to-resync
+                // handler below (see beatDisplay's click listener) -
+                // needed since this markup is fully replaced every tick,
+                // so nothing can be wired to a specific persistent element.
+                const title = i === 1 ? ' title="Click on the downbeat to sync the standalone metronome to it"' : '';
+                html += `<span class="${classes.join(' ')}" data-beat="${i}"${title}>${i}</span>`;
             }
             document.getElementById('beatDisplay').innerHTML = html;
         }
@@ -2631,26 +3293,107 @@
                 // fires (below) - the highlight is driven from this tick,
                 // not the RAF scroll loop's own continuously-advancing
                 // clock, so it can never drift out of sync with what's
-                // actually sounding. Independent of the Play Chords toggle
-                // so the highlight still tracks the beat even when chord
-                // audio itself is off.
+                // actually sounding. Always runs during playback, regardless
+                // of Metronome/Play Chords - those two only control what's
+                // audible, not the visual highlight, which is useful on its
+                // own (e.g. following along silently, or with the chord
+                // audio muted).
                 const elapsedMeasures = songClockBaseMeasure + songBeatIndex / beatsPerMeasure;
+                // Re-sync the RAF scroll loop's own continuously-advancing
+                // songElapsedMeasures to this tick's authoritative value on
+                // every beat. The two clocks (setInterval here, RAF in
+                // scrollStep) drift apart over a long playback run - and
+                // since a Stop/resume computes where to pick up chord
+                // playback from songElapsedMeasures (see
+                // computePendingResumeMeasure), any accumulated drift there
+                // meant resuming could recompute chordScheduleIndex a beat
+                // or two behind where the metronome had actually already
+                // played through, re-firing chords that had already
+                // sounded - heard as the chord playing twice, out of time.
+                songElapsedMeasures = elapsedMeasures;
                 updateActiveChordHighlight(elapsedMeasures);
-                if (document.getElementById('playChordsToggle').checked) {
+                const playChordsOn = document.getElementById('playChordsToggle').checked;
+                if (playChordsOn) {
                     let struckThisTick = false;
+                    let newChordThisTick = null;
                     while (chordScheduleIndex < chordSchedule.length && chordSchedule[chordScheduleIndex].measurePosition <= elapsedMeasures) {
-                        playChordByName(chordSchedule[chordScheduleIndex].chord);
+                        if (window.CPL_DEBUG) console.log('[chord] scheduled', chordSchedule[chordScheduleIndex].chord, 'idx', chordScheduleIndex, 'at', elapsedMeasures.toFixed(4), 'entryPos', chordSchedule[chordScheduleIndex].measurePosition.toFixed(4));
+                        newChordThisTick = chordSchedule[chordScheduleIndex].chord;
                         chordScheduleIndex++;
                         struckThisTick = true;
                     }
-                    // A chord's duration can carry it past a measure
-                    // boundary with no new {cpl_m:} entry marking that
-                    // measure - meaning it's still ringing into it, not
-                    // silent - so re-strum whatever chord is currently
-                    // held at the top of every measure that doesn't mark
-                    // its own.
-                    if (beatInMeasure === 1 && !struckThisTick && chordScheduleIndex > 0) {
-                        playChordByName(chordSchedule[chordScheduleIndex - 1].chord);
+
+                    const strumPattern = STRUM_PATTERNS[document.getElementById('strumPatternSelect').value] || STRUM_PATTERNS.single;
+                    const usePatternGrid = strumPattern.slots && beatsPerMeasure === 4;
+
+                    if (!usePatternGrid) {
+                        // Single Chord Strum (or a non-4/4 time signature,
+                        // which the grid patterns aren't defined for): one
+                        // strum on chord change, plus a once-per-measure
+                        // re-strum of whatever chord is still sustaining. A
+                        // chord's duration can carry it past a measure
+                        // boundary with no new {cpl_m:} entry marking that
+                        // measure - meaning it's still ringing into it, not
+                        // silent - so re-strum whatever chord is currently
+                        // held at the top of every measure that doesn't mark
+                        // its own. Must be a REAL measure-boundary crossing
+                        // (Math.floor(elapsedMeasures) changing since the
+                        // previous tick), not beatInMeasure === 1 - that's
+                        // counted from tick 0 of THIS resume, which only
+                        // lines up with true boundaries when resuming from a
+                        // whole measure. A mid-song resume from a fractional
+                        // position (e.g. 5.375, stopped mid-measure) sends a
+                        // false "beat 1" every 4 ticks at 5.375, 6.375,
+                        // 7.375... - none of them real boundaries - each one
+                        // spuriously re-striking the currently-held chord
+                        // right after it had already sounded, heard as
+                        // random doubled chords.
+                        if (struckThisTick) {
+                            // Chord-change strum - always accented.
+                            playChordByName(newChordThisTick, 'down', true);
+                        }
+                        const crossedMeasureBoundary = songBeatIndex === 0 ||
+                            Math.floor(elapsedMeasures) !== Math.floor(elapsedMeasures - 1 / beatsPerMeasure);
+                        if (crossedMeasureBoundary && !struckThisTick && chordScheduleIndex > 0) {
+                            if (window.CPL_DEBUG) console.log('[chord] SUSTAIN re-strum', chordSchedule[chordScheduleIndex - 1].chord, 'idx', chordScheduleIndex - 1, 'at', elapsedMeasures.toFixed(4));
+                            // Falls on the downbeat of a new measure - accented.
+                            playChordByName(chordSchedule[chordScheduleIndex - 1].chord, 'down', true);
+                        }
+                    } else {
+                        // Grid-driven strum pattern: chord onsets always land
+                        // on a quarter-beat slot (chord durations snap to
+                        // quarter-measure ticks), so this tick's own onset
+                        // and the pattern grid share the same quarter-beat
+                        // clock - no extra timing engine needed for the
+                        // down-strum ('D') slots. Up-strums ('U') land on
+                        // the "+" eighth-note between this beat and the
+                        // next, scheduled via setTimeout at half a beat from
+                        // now (cleared on Stop - see clearPendingStrumTimeouts).
+                        const heldChord = struckThisTick
+                            ? newChordThisTick
+                            : (chordScheduleIndex > 0 ? chordSchedule[chordScheduleIndex - 1].chord : null);
+                        if (heldChord !== null) {
+                            const quarterSlot = strumPattern.slots[2 * (beatInMeasure - 1)];
+                            const offBeatSlot = strumPattern.slots[2 * (beatInMeasure - 1) + 1];
+                            // A chord change is always audible, even if this
+                            // pattern rests on this beat (e.g. Best Strum
+                            // rests on beat 3) - a new chord should never
+                            // start silently.
+                            if (struckThisTick || quarterSlot === 'D') {
+                                // Accented on a chord change or the downbeat
+                                // of the measure - everything else in the
+                                // pattern strums lighter.
+                                const isAccent = struckThisTick || beatInMeasure === 1;
+                                if (window.CPL_DEBUG) console.log('[chord] STRUM down', heldChord, 'beat', beatInMeasure, 'accent', isAccent, 'at', elapsedMeasures.toFixed(4));
+                                playChordByName(heldChord, 'down', isAccent);
+                            }
+                            if (offBeatSlot === 'U') {
+                                const halfBeatMs = (60 / bpm / 2) * 1000;
+                                if (window.CPL_DEBUG) console.log('[chord] STRUM up (scheduled)', heldChord, 'beat', beatInMeasure, 'at', elapsedMeasures.toFixed(4));
+                                const t = setTimeout(() => playChordByName(heldChord, 'up'), halfBeatMs);
+                                pendingStrumTimeouts.push(t);
+                            }
+                        }
                     }
                 }
             }
@@ -2683,7 +3426,69 @@
                 clearInterval(metronomeInterval);
                 metronomeInterval = null;
             }
+            clearPendingStrumTimeouts();
             updateBeatDisplay(0, getBeatsPerMeasure());
+        }
+
+        // Standalone metronome (#metronomePlayBtn) - just an audible/visual
+        // click-track for getting the tempo in your ear before playing,
+        // entirely separate from the real playback clock (metronomeTick
+        // above): no scrolling, no chord scheduling/highlight, no
+        // songElapsedMeasures. Always clicks when running, regardless of
+        // the Metronome checkbox (that toggle only silences the metronome
+        // during actual Scroll playback) - the whole point of pressing this
+        // button is to hear a click.
+        let standaloneMetronomeInterval = null;
+        let standaloneBeatCount = 0;
+
+        function standaloneMetronomeTick() {
+            const beatsPerMeasure = getBeatsPerMeasure();
+            const beatInMeasure = (standaloneBeatCount % beatsPerMeasure) + 1;
+            standaloneBeatCount++;
+            updateBeatDisplay(beatInMeasure, beatsPerMeasure);
+            playMetronomeClick(beatInMeasure === 1);
+        }
+
+        function startStandaloneMetronome() {
+            standaloneBeatCount = 0;
+            standaloneMetronomeTick();
+            standaloneMetronomeInterval = setInterval(standaloneMetronomeTick, (60 / bpm) * 1000);
+            document.getElementById('metronomePlayBtn').innerHTML = '&#9724;';
+        }
+
+        // Same "reschedule the interval, keep the beat position" pattern as
+        // resyncMetronomeToBPM above, for the standalone metronome's own
+        // independent interval.
+        function resyncStandaloneMetronomeToBPM() {
+            if (!standaloneMetronomeInterval) return;
+            clearInterval(standaloneMetronomeInterval);
+            standaloneMetronomeInterval = setInterval(standaloneMetronomeTick, (60 / bpm) * 1000);
+        }
+
+        function stopStandaloneMetronome() {
+            if (standaloneMetronomeInterval) {
+                clearInterval(standaloneMetronomeInterval);
+                standaloneMetronomeInterval = null;
+                updateBeatDisplay(0, getBeatsPerMeasure());
+            }
+            document.getElementById('metronomePlayBtn').innerHTML = '&#9654;';
+        }
+
+        // Click-to-resync: while the standalone metronome is running,
+        // clicking the "1" (see updateBeatDisplay's data-beat/title) marks
+        // that exact click as the true downbeat - the tick fires
+        // immediately (so the click itself sounds/flashes as beat 1) and
+        // the interval restarts from that instant, at the current tempo.
+        // Scoped to the standalone metronome only, not live Scroll
+        // playback - realigning beat phase mid-song would also have to
+        // rework the continuous elapsed-measure math chord scheduling
+        // depends on, a much bigger and riskier change.
+        function resyncStandaloneMetronomeToNow() {
+            if (!standaloneMetronomeInterval) return;
+            clearInterval(standaloneMetronomeInterval);
+            standaloneBeatCount = 0;
+            standaloneMetronomeTick();
+            standaloneMetronomeInterval = setInterval(standaloneMetronomeTick, (60 / bpm) * 1000);
         }
 
         // Runs the metronome for `ticks` beats (visually always; audibly
@@ -2717,9 +3522,22 @@
 
         function beginCountInThenScroll() {
             const sheetPane = document.getElementById('sheetPane');
-            sheetPane.scrollIntoView({ behavior: 'auto', block: 'start' });
+            document.querySelector('.chordplayer-bar').scrollIntoView({ behavior: 'auto', block: 'start' });
             clearResumeFlash();
+            // Belt-and-suspenders alongside haltPlayback's own cutoff: a
+            // chord struck right before Stop can still be ringing (each
+            // note lasts up to a few seconds - see PLAYBACK_NOTE_DURATION),
+            // and letting it bleed into freshly resumed playback sounds
+            // like the chord playing twice, out of time with itself.
+            stopAllChordAudio();
 
+            // Only a plain "wherever it stopped" resume needs snapping to a
+            // clean chord/measure boundary (see snappedResumeMeasure below)
+            // - an explicit right-click mark, a tempo-drag pause resume, or
+            // restarting after the song finished are all already exact,
+            // intentional positions and must be used as-is. Captured before
+            // computePendingResumeMeasure() consumes resumePointChord below.
+            const isPlainContinuation = !resumePointChord && !tempoPauseState && !songFinished;
             const resumeMeasure = computePendingResumeMeasure();
             resumePointChord = null; // consume any explicit mark either way
 
@@ -2734,22 +3552,61 @@
 
             if (resumeMeasure > 0) {
                 // Resuming mid-song - a right-click mark, or wherever
-                // playback actually last stopped - never repositions the
-                // sheet; once the count-in ends, scrolling just continues
-                // moving from wherever it's already scrolled. A short
-                // 2-beat count-in (beats "3, 4" counting into the downbeat
-                // - see metronomeTick's signed modulo) instead of a full
-                // measure, and no lead-in wait, since the reader is already
-                // looking at roughly the right spot.
+                // playback actually last stopped - normally never
+                // repositions the sheet; once the count-in ends, scrolling
+                // just continues moving from wherever it's already
+                // scrolled. A short 2-beat count-in (beats "3, 4" counting
+                // into the downbeat - see metronomeTick's signed modulo)
+                // instead of a full measure, and no lead-in wait, since the
+                // reader is already looking at roughly the right spot.
                 songFinished = false;
-                songElapsedMeasures = resumeMeasure;
-                songClockBaseMeasure = resumeMeasure;
-                scrollStartMeasure = resumeMeasure;
                 chordScheduleIndex = chordSchedule.findIndex(c => c.measurePosition >= resumeMeasure);
                 if (chordScheduleIndex === -1) chordScheduleIndex = chordSchedule.length;
+
+                // For a plain "wherever it stopped" resume, snap back to the
+                // true start of whichever chord was actually sounding (or
+                // the nearest whole measure, if Play Chords is off and
+                // there's no chord to anchor to) instead of resuming from
+                // the exact - possibly mid-strum - measure position it
+                // stopped at. Two reasons: the first strum after resuming is
+                // then a clean full-length onset of that chord rather than
+                // picking it up already in progress/clipped, and every later
+                // measure-boundary check (metronomeTick's re-strum) lines up
+                // with the real chord grid instead of the arbitrary
+                // fractional offset the song happened to stop at. An
+                // explicit right-click mark/tempo-pause/restart resume is
+                // already an exact, intentional position - chordScheduleIndex
+                // lands ON that chord rather than past it, so snapping to
+                // chordScheduleIndex - 1 there would snap to the WRONG
+                // (previous) chord instead - leave those untouched.
+                const heldChord = (isPlainContinuation && chordScheduleIndex > 0) ? chordSchedule[chordScheduleIndex - 1] : null;
+                const snappedResumeMeasure = heldChord ? heldChord.measurePosition
+                    : isPlainContinuation ? Math.floor(resumeMeasure)
+                    : resumeMeasure;
+
+                songElapsedMeasures = snappedResumeMeasure;
+                songClockBaseMeasure = snappedResumeMeasure;
+                scrollStartMeasure = snappedResumeMeasure;
+                if (window.CPL_DEBUG) console.log('[resume]', 'resumeMeasure', resumeMeasure.toFixed(4), 'snappedTo', snappedResumeMeasure.toFixed(4), 'chordScheduleIndex', chordScheduleIndex, 'prevEntry', chordSchedule[chordScheduleIndex - 1], 'nextEntry', chordSchedule[chordScheduleIndex]);
                 chordHighlightList = buildChordHighlightList();
 
                 currentMeasurePixelMap = buildMeasurePixelMap();
+
+                // The one exception to "never repositions the sheet": if the
+                // reader has manually scrolled the resume chord itself off
+                // screen since stopping, resuming without moving the pane
+                // would start the count-in against a chord they can't even
+                // see. Snap it back into view - centered vertically in the
+                // pane - before the count-in begins; otherwise leave the
+                // pane exactly where it is.
+                const resumeTarget = scrollTopForMeasure(snappedResumeMeasure);
+                const isResumeChordVisible = resumeTarget !== null &&
+                    resumeTarget >= sheetPane.scrollTop &&
+                    resumeTarget <= sheetPane.scrollTop + sheetPane.clientHeight;
+                if (!isResumeChordVisible && resumeTarget !== null) {
+                    sheetPane.scrollTop = Math.max(0, Math.round(resumeTarget - sheetPane.clientHeight / 2));
+                }
+
                 setScrollJumpCorrection(scrollStartMeasure);
                 const lastLineMeasure = currentMeasurePixelMap.length
                     ? currentMeasurePixelMap[currentMeasurePixelMap.length - 1].measureEnd
@@ -2783,21 +3640,43 @@
         // in progress) - as opposed to pauseForTempoChange, which only
         // suspends it mid-drag expecting a resume.
         function haltPlayback() {
+            if (window.CPL_DEBUG) console.log('[stop]', 'songElapsedMeasures', songElapsedMeasures.toFixed(4), 'chordScheduleIndex', chordScheduleIndex, 'scrollTop', document.getElementById('sheetPane').scrollTop);
             isScrolling = false;
             tempoPauseState = null;
             tempoDragActive = false;
             stopMetronome();
             clearChordHighlight();
+            stopAllChordAudio();
             document.getElementById('scrollToggleBtn').innerHTML = '&#9654; Scroll';
             updateResumeFlashDOM();
         }
 
         document.getElementById('scrollToggleBtn').addEventListener('click', () => {
+            // Pressing Scroll always wins over the standalone metronome -
+            // stop that click-track first so playback starts clean and
+            // synced to its own count-in, instead of two metronomes
+            // ticking at once.
+            stopStandaloneMetronome();
             if (isScrolling || isCountingIn || tempoPauseState) {
                 haltPlayback();
             } else {
                 beginCountInThenScroll();
             }
+        });
+
+        document.getElementById('metronomePlayBtn').addEventListener('click', () => {
+            if (standaloneMetronomeInterval) {
+                stopStandaloneMetronome();
+            } else {
+                startStandaloneMetronome();
+            }
+        });
+
+        // Delegated (not bound to the "1" span directly) since
+        // updateBeatDisplay replaces the whole beatDisplay markup every tick.
+        document.getElementById('beatDisplay').addEventListener('click', (e) => {
+            const target = e.target.closest('.beat-num');
+            if (target && target.dataset.beat === '1') resyncStandaloneMetronomeToNow();
         });
 
         // Clicking a chord to edit its duration (or just manually scrolling
@@ -2806,6 +3685,7 @@
         // of the song without having to scroll the sheet there by hand.
         document.getElementById('topBtn').addEventListener('click', () => {
             haltPlayback();
+            document.querySelector('.chordplayer-bar').scrollIntoView({ behavior: 'auto', block: 'start' });
             document.getElementById('sheetPane').scrollTop = 0;
             songElapsedMeasures = 0;
             scrollStartMeasure = 0;
@@ -2862,6 +3742,7 @@
             } else {
                 resyncMetronomeToBPM();
             }
+            resyncStandaloneMetronomeToBPM();
         });
 
         document.getElementById('bpmSlider').addEventListener('change', () => {
@@ -2871,16 +3752,124 @@
             }
         });
 
+        document.getElementById('youtubeUrlInput').addEventListener('change', updateVideoEmbed);
+
+        document.getElementById('videoSpeedSelect').addEventListener('change', (e) => {
+            if (ytPlayer) ytPlayer.setPlaybackRate(parseFloat(e.target.value));
+        });
+
+        document.getElementById('videoVolumeSlider').addEventListener('input', (e) => {
+            if (ytPlayer) ytPlayer.setVolume(parseInt(e.target.value, 10));
+        });
+
+        // Live-update the time label while dragging (videoPositionDragging
+        // suppresses the polling loop in startVideoPositionPolling so it
+        // doesn't fight the drag), then actually seek only once released -
+        // seeking on every 'input' tick would spam the player with
+        // requests and make dragging feel laggy/stuttery.
+        document.getElementById('videoPositionSlider').addEventListener('input', (e) => {
+            videoPositionDragging = true;
+            document.getElementById('videoPositionLabel').textContent = formatVideoTime(parseInt(e.target.value, 10));
+        });
+        document.getElementById('videoPositionSlider').addEventListener('change', (e) => {
+            if (ytPlayer) ytPlayer.seekTo(parseInt(e.target.value, 10), true);
+            videoPositionDragging = false;
+        });
+
+        // Tap-tempo: click #tapTempoBtn in rhythm with the reference video
+        // to set the BPM slider by ear, rather than dragging it. Averages
+        // the last several taps (a single interval would be too noisy) - a
+        // gap longer than TAP_TIMEOUT_MS since the last tap starts a fresh
+        // rhythm instead of blending into a stale one.
+        let tapTimestamps = [];
+        const TAP_TIMEOUT_MS = 2000;
+        const TAP_MAX_SAMPLES = 8;
+
+        document.getElementById('tapTempoBtn').addEventListener('click', () => {
+            const now = performance.now();
+            if (tapTimestamps.length && now - tapTimestamps[tapTimestamps.length - 1] > TAP_TIMEOUT_MS) {
+                tapTimestamps = [];
+            }
+            tapTimestamps.push(now);
+            if (tapTimestamps.length > TAP_MAX_SAMPLES) tapTimestamps.shift();
+            if (tapTimestamps.length < 2) return;
+
+            const intervals = [];
+            for (let i = 1; i < tapTimestamps.length; i++) intervals.push(tapTimestamps[i] - tapTimestamps[i - 1]);
+            const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+
+            const slider = document.getElementById('bpmSlider');
+            const min = parseInt(slider.min, 10);
+            const max = parseInt(slider.max, 10);
+            bpm = Math.min(max, Math.max(min, Math.round(60000 / avgMs)));
+            slider.value = bpm;
+            updateBpmLabel();
+            resyncMetronomeToBPM();
+            resyncStandaloneMetronomeToBPM();
+        });
+
         document.getElementById('timeSignatureSelect').addEventListener('change', () => {
             if (!isScrolling && !isCountingIn) updateBeatDisplay(0, getBeatsPerMeasure());
         });
 
         updateBeatDisplay(0, getBeatsPerMeasure());
 
-        document.getElementById('sourceViewSource').addEventListener('change', renderActive);
-        document.getElementById('sourceViewTagged').addEventListener('change', renderActive);
-        document.getElementById('viewModeRaw').addEventListener('change', renderActive);
-        document.getElementById('viewModeSheet').addEventListener('change', renderActive);
+        // Restores Play Chords to whatever it was last set to while in
+        // ChordPlayer+Sheet mode - called only from the mode-switching
+        // listeners below (not from syncPaneDisplay, which runs on every
+        // render and would otherwise clobber a live in-mode toggle).
+        function restorePlayChordsForMode() {
+            const showTagged = document.getElementById('sourceViewTagged').checked;
+            const showSheet = document.getElementById('viewModeSheet').checked;
+            if (showTagged && showSheet) {
+                document.getElementById('playChordsToggle').checked = lastPlayChordsInSheetMode;
+            }
+        }
+
+        document.getElementById('sourceViewSource').addEventListener('change', () => {
+            renderActive();
+            restorePlayChordsForMode();
+        });
+        document.getElementById('sourceViewTagged').addEventListener('change', () => {
+            renderActive();
+            restorePlayChordsForMode();
+        });
+
+        // Choosing Sheet or Raw is the trigger to convert the pasted text
+        // into a song, the first time either is chosen with nothing loaded
+        // yet - whichever one you clicked is respected as-is (unlike a
+        // file/drop load, which always resets to the Sheet+Chordplayer
+        // defaults - see loadNewSource), so picking Raw first lands you in
+        // Raw, not bounced back to Sheet.
+        function handleViewModeChange() {
+            if (!sourceLoaded) {
+                if (ingestSource(document.getElementById('rawPane').value)) finishLoad();
+                return;
+            }
+            renderActive();
+            restorePlayChordsForMode();
+        }
+        document.getElementById('viewModeRaw').addEventListener('change', handleViewModeChange);
+        document.getElementById('viewModeSheet').addEventListener('change', handleViewModeChange);
+        document.getElementById('playChordsToggle').addEventListener('change', () => {
+            const showTagged = document.getElementById('sourceViewTagged').checked;
+            const showSheet = document.getElementById('viewModeSheet').checked;
+            if (showTagged && showSheet) {
+                lastPlayChordsInSheetMode = document.getElementById('playChordsToggle').checked;
+            }
+
+            // Take effect immediately if playback is already running,
+            // rather than only on the next Scroll press - re-derive the
+            // live chord schedule from the current playback position
+            // (same lookup beginCountInThenScroll uses for a mid-song
+            // resume), so checking it back on picks up the schedule from
+            // here rather than replaying everything already passed.
+            if (isScrolling || isCountingIn) {
+                chordSchedule = document.getElementById('playChordsToggle').checked ? currentChordScheduleFull : [];
+                chordScheduleIndex = chordSchedule.findIndex(c => c.measurePosition >= songElapsedMeasures);
+                if (chordScheduleIndex === -1) chordScheduleIndex = chordSchedule.length;
+            }
+        });
         document.getElementById('printDiagramsCheck').addEventListener('change', renderActive);
 
         document.getElementById('chordDurationSelect').addEventListener('change', regenerateTaggedFromSource);
@@ -2893,13 +3882,13 @@
         // keystrokes into the in-memory tagged buffer as they happen, but
         // only re-render the sheet on blur so the sheet doesn't jump around
         // mid-edit.
-        const chordproInputEl = document.getElementById('chordproInput');
-        chordproInputEl.addEventListener('input', () => {
-            if (!sourceLoaded || chordproInputEl.readOnly) return;
-            chordPlayerText = chordproInputEl.value;
+        const rawPaneEl = document.getElementById('rawPane');
+        rawPaneEl.addEventListener('input', () => {
+            if (!sourceLoaded || rawPaneEl.readOnly) return;
+            chordPlayerText = rawPaneEl.value;
             tagsDirty = true;
         });
-        chordproInputEl.addEventListener('blur', () => {
+        rawPaneEl.addEventListener('blur', () => {
             if (!sourceLoaded || document.getElementById('sourceViewSource').checked) return;
             renderActive();
         });
@@ -2928,18 +3917,27 @@
         }
 
         // Re-parses the tagged buffer (the only mutable copy) and locates
-        // one specific chord instance by (lineIdx, chordIdx) - the same
-        // addressing the rendered chord-label spans carry as data
-        // attributes. Returns null if the buffer has since changed shape
-        // out from under that address (e.g. stale popup after a reload).
-        function findTaggedChord(lineIdx, chordIdx) {
+        // one specific line by lineIdx - the same addressing the rendered
+        // chord-label spans carry as a data attribute. Returns null if the
+        // buffer has since changed shape out from under that address (e.g.
+        // stale popup after a reload).
+        function findTaggedChordLine(lineIdx) {
             const song = parseChordPro(chordPlayerText);
             const line = collectSongLines(song)[lineIdx];
             if (!line) return null;
-            const chords = [...line.chords].sort((a, b) => a.index - b.index);
+            return { song, line };
+        }
+
+        // Same, but also locates one specific chord instance by chordIdx
+        // within that line (its position in index-sorted order, matching
+        // the chord-label's data-chord-idx).
+        function findTaggedChord(lineIdx, chordIdx) {
+            const found = findTaggedChordLine(lineIdx);
+            if (!found) return null;
+            const chords = [...found.line.chords].sort((a, b) => a.index - b.index);
             const chord = chords[chordIdx];
             if (!chord) return null;
-            return { song, chord };
+            return { song: found.song, line: found.line, chord };
         }
 
         // Re-serializes an edited parse back into the tagged buffer and
@@ -2974,9 +3972,12 @@
         // the chord's duration untouched. Renders through the normal
         // pipeline, so the chord-diagram legend picks up the new chord
         // automatically.
+        // An empty name is valid - it blanks the chord to silence (see
+        // deleteChordAt) while keeping its own position and duration, so
+        // typing a chord's name away entirely is a deliberate way to mute
+        // that one measure without disturbing the song's overall timing.
         function renameChordAt(lineIdx, chordIdx, rawName) {
             const name = rawName.replace(/[[\]{}]/g, '').trim();
-            if (!name) return null;
             const found = findTaggedChord(lineIdx, chordIdx);
             if (!found) return null;
             const { song, chord } = found;
@@ -2984,6 +3985,184 @@
             chord.chord = name;
             commitTaggedSong(song);
             return name;
+        }
+
+        // Every chord in the song, addressed and in true document order
+        // (sections -> lines -> chords sorted by index) - the same
+        // sequence computeMeasureTiming assigns increasing measure
+        // positions to, so "the previous chord" here always means the same
+        // thing as "the previous chord in song time", even across a line
+        // break. Used by deleteChordAt to find who inherits a deleted
+        // chord's duration.
+        function flattenTaggedChords(song) {
+            const flat = [];
+            collectSongLines(song).forEach((line, lineIdx) => {
+                const sorted = [...line.chords].sort((a, b) => a.index - b.index);
+                sorted.forEach((chord, chordIdx) => flat.push({ lineIdx, chordIdx, chord, line }));
+            });
+            return flat;
+        }
+
+        // Removes one chord instance - its duration is handed to whichever
+        // chord comes right before it in song time (possibly on an earlier
+        // line), which simply extends to cover the time the deleted chord
+        // held, rather than shortening the song. The very first chord in
+        // the song has nothing before it to extend, so it can't be removed
+        // outright without shortening the song - instead it's blanked to a
+        // nameless, silent measure (an empty [] - see playChordByName,
+        // which simply finds no voicing for '' and plays nothing) that
+        // keeps its own position and duration, preserving the song's
+        // overall timing.
+        function deleteChordAt(lineIdx, chordIdx) {
+            const found = findTaggedChord(lineIdx, chordIdx);
+            if (!found) return false;
+            const { song, line, chord } = found;
+            const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
+            const deletedDuration = chord.measureDuration != null ? chord.measureDuration : chordDurationMeasures;
+
+            const flat = flattenTaggedChords(song);
+            const myFlatIdx = flat.findIndex((f) => f.chord === chord);
+            const prev = myFlatIdx > 0 ? flat[myFlatIdx - 1] : null;
+
+            if (!prev) {
+                chord.chord = '';
+                commitTaggedSong(song);
+                return true;
+            }
+
+            const prevDuration = prev.chord.measureDuration != null ? prev.chord.measureDuration : chordDurationMeasures;
+            prev.chord.measureDuration = prevDuration + deletedDuration;
+            line.chords = line.chords.filter((c) => c !== chord);
+            commitTaggedSong(song);
+            return true;
+        }
+
+        // Inserts a brand-new "C" chord by SPLITTING whichever existing
+        // chord's own time span the click landed in, rather than adding a
+        // fresh full/auto-duration chord - so the song's overall length,
+        // and every later chord's timing, is completely unaffected. The
+        // held (previous) chord's duration shrinks to end at the click
+        // point (snapped to the nearest quarter-measure tick, the same
+        // granularity the -/+ duration stepper uses); the new chord picks
+        // up exactly the remainder, up to where the held chord used to
+        // end - e.g. splitting a full-measure chord at its middle leaves
+        // two half-measure chords, splitting a half-measure chord at its
+        // middle leaves two quarter-measure chords.
+        //
+        // targetChordIdx is the click's index-sorted slot (see
+        // findInsertionGap) - the held chord is whatever sits right before
+        // it. If there's nothing before it (click landed before the very
+        // first chord on the line), there's no span to split, so this
+        // falls back to a plain auto-duration insert instead (same as
+        // typing a fresh chord into the source).
+        function insertChordAt(lineIdx, targetChordIdx, clientX) {
+            const found = findTaggedChordLine(lineIdx);
+            if (!found) return null;
+            const { song, line } = found;
+            const sorted = [...line.chords].sort((a, b) => a.index - b.index);
+            const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
+            const lt = currentLineTimings[lineIdx];
+            const heldCp = targetChordIdx > 0 && lt ? lt.chordPositions[targetChordIdx - 1] : null;
+
+            let newIndex, newDuration;
+            if (!heldCp) {
+                const prevIdx = targetChordIdx > 0 ? sorted[targetChordIdx - 1].index : 0;
+                const nextIdx = targetChordIdx < sorted.length ? sorted[targetChordIdx].index : line.lyric.length;
+                newIndex = Math.max(0, Math.min(Math.round((prevIdx + nextIdx) / 2), line.lyric.length));
+                newDuration = chordDurationMeasures;
+            } else {
+                const heldStart = heldCp.measurePosition;
+                const heldEnd = heldStart + heldCp.measureDuration;
+
+                // Where the click landed within the held chord's own
+                // rendered span - between its own label and whichever
+                // label (or the grid's right edge) comes right after it.
+                const labels = Array.from(document.querySelectorAll(`#sheetPane .chord-label[data-line-idx="${lineIdx}"]`))
+                    .sort((a, b) => parseInt(a.dataset.chordIdx, 10) - parseInt(b.dataset.chordIdx, 10));
+                const heldLabel = labels[targetChordIdx - 1];
+                const nextLabel = labels[targetChordIdx];
+                const heldLeft = heldLabel.getBoundingClientRect().left;
+                const rightEdge = nextLabel
+                    ? nextLabel.getBoundingClientRect().left
+                    : heldLabel.closest('.sheet-chords-grid').getBoundingClientRect().right;
+                const frac = rightEdge > heldLeft ? Math.max(0, Math.min(1, (clientX - heldLeft) / (rightEdge - heldLeft))) : 0.5;
+
+                let splitPoint = Math.round((heldStart + frac * (heldEnd - heldStart)) * 4) / 4;
+                splitPoint = Math.max(heldStart + 0.25, Math.min(splitPoint, heldEnd - 0.25));
+                if (splitPoint <= heldStart || splitPoint >= heldEnd) return null; // no room to split
+
+                const heldChordObj = sorted[targetChordIdx - 1];
+                heldChordObj.measureDuration = splitPoint - heldStart;
+                newDuration = heldEnd - splitPoint;
+
+                const nextIdx = targetChordIdx < sorted.length ? sorted[targetChordIdx].index : line.lyric.length;
+                newIndex = Math.max(0, Math.min(Math.round((heldChordObj.index + nextIdx) / 2), line.lyric.length));
+            }
+
+            const newChord = { chord: 'C', index: newIndex, measureDuration: newDuration };
+            sorted.splice(targetChordIdx, 0, newChord);
+            line.chords = sorted;
+            commitTaggedSong(song);
+            return targetChordIdx;
+        }
+
+        // Local pixels-per-measure at one chord's position on its line -
+        // used to turn a drag's raw pixel delta into a measure delta (see
+        // nudgeChordTiming). Estimated from the rendered distance to
+        // whichever immediate neighbor is available (preferring the next
+        // chord, falling back to the previous one) - a chord alone on its
+        // line with no same-line neighbor in either direction has nothing
+        // to estimate a scale from, so dragging it is a no-op.
+        function estimateLocalPixelsPerMeasure(lineIdx, chordIdx) {
+            const lt = currentLineTimings[lineIdx];
+            if (!lt) return null;
+            const labels = Array.from(document.querySelectorAll(`#sheetPane .chord-label[data-line-idx="${lineIdx}"]`))
+                .sort((a, b) => parseInt(a.dataset.chordIdx, 10) - parseInt(b.dataset.chordIdx, 10));
+            const thisLabel = labels[chordIdx];
+            const thisCp = lt.chordPositions[chordIdx];
+            if (!thisLabel || !thisCp) return null;
+            const neighborIdx = chordIdx + 1 < labels.length ? chordIdx + 1 : chordIdx - 1;
+            const neighborLabel = labels[neighborIdx];
+            const neighborCp = lt.chordPositions[neighborIdx];
+            if (!neighborLabel || !neighborCp) return null;
+            const measureDist = neighborCp.measurePosition - thisCp.measurePosition;
+            if (!measureDist) return null;
+            return (neighborLabel.getBoundingClientRect().left - thisLabel.getBoundingClientRect().left) / measureDist;
+        }
+
+        // Dragging a chord left/right nudges WHEN it starts, snapped to the
+        // nearest quarter-measure tick, by moving the boundary between it
+        // and whichever chord precedes it in song time (possibly on an
+        // earlier line - see flattenTaggedChords): the dragged chord's own
+        // duration shrinks/grows by the same amount its start moved (its
+        // END stays fixed), and the preceding chord's duration absorbs the
+        // opposite change - so the dragged chord's own end, and everything
+        // after it, never moves. Clamped so neither chord's duration drops
+        // below one quarter-measure tick, and a no-op if there's no
+        // preceding chord at all (the very first chord in the song defines
+        // measure 0 - nothing to borrow time from/give time to).
+        function nudgeChordTiming(lineIdx, chordIdx, deltaMeasures) {
+            const found = findTaggedChord(lineIdx, chordIdx);
+            if (!found) return false;
+            const { song, chord } = found;
+            const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
+            const oldDuration = chord.measureDuration != null ? chord.measureDuration : chordDurationMeasures;
+
+            const flat = flattenTaggedChords(song);
+            const myFlatIdx = flat.findIndex((f) => f.chord === chord);
+            const prevEntry = myFlatIdx > 0 ? flat[myFlatIdx - 1] : null;
+            if (!prevEntry) return false;
+            const prevDuration = prevEntry.chord.measureDuration != null ? prevEntry.chord.measureDuration : chordDurationMeasures;
+
+            let delta = Math.round(deltaMeasures * 4) / 4;
+            delta = Math.max(delta, 0.25 - prevDuration);
+            delta = Math.min(delta, oldDuration - 0.25);
+            if (!delta) return false;
+
+            chord.measureDuration = oldDuration - delta;
+            prevEntry.chord.measureDuration = prevDuration + delta;
+            commitTaggedSong(song);
+            return true;
         }
 
         function updateDurationPopupValue(value) {
@@ -3049,15 +4228,112 @@
         document.getElementById('durationPopupChord').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') e.target.blur();
         });
+        document.getElementById('durationPopupDelete').addEventListener('click', () => {
+            if (!durationPopupState) return;
+            const { lineIdx, chordIdx } = durationPopupState;
+            deleteChordAt(lineIdx, chordIdx);
+            hideDurationPopup();
+        });
 
-        document.getElementById('sheetPane').addEventListener('click', (e) => {
+        // Which index-sorted slot a horizontal position falls into on one
+        // line - shared by inserting a new chord (see the empty-space click
+        // handler below) and dropping a dragged one (see the pointerup
+        // handler below, which passes excludeChordIdx so the dragged
+        // chord's own current slot doesn't skew the comparison). Compares
+        // against the ACTUAL rendered chord-label positions rather than
+        // recomputing character/measure math, so it works identically for
+        // both the lyric-anchored and even (chord-only) grid layouts.
+        function findInsertionGap(lineIdx, clientX, excludeChordIdx) {
+            const labels = Array.from(document.querySelectorAll(`#sheetPane .chord-label[data-line-idx="${lineIdx}"]`))
+                .filter((el) => parseInt(el.dataset.chordIdx, 10) !== excludeChordIdx)
+                .sort((a, b) => parseInt(a.dataset.chordIdx, 10) - parseInt(b.dataset.chordIdx, 10));
+            for (let i = 0; i < labels.length; i++) {
+                if (clientX < labels[i].getBoundingClientRect().left + labels[i].getBoundingClientRect().width / 2) return i;
+            }
+            return labels.length;
+        }
+
+        // Drag-to-reorder state for the chord-label pointer handlers below.
+        // A real drag vs. a plain click (which opens the duration popup) is
+        // disambiguated by a small movement threshold - see pointermove.
+        let chordDragState = null; // { lineIdx, chordIdx, pointerId, startX, moved, el }
+        let suppressNextChordClick = false;
+
+        document.getElementById('sheetPane').addEventListener('pointerdown', (e) => {
+            if (!document.getElementById('sourceViewTagged').checked) return;
             const target = e.target.closest('.chord-label');
-            if (!target || !document.getElementById('sourceViewTagged').checked) return;
+            if (!target) return;
             const lineIdx = parseInt(target.dataset.lineIdx, 10);
             const chordIdx = parseInt(target.dataset.chordIdx, 10);
             if (isNaN(lineIdx) || isNaN(chordIdx)) return;
+            chordDragState = { lineIdx, chordIdx, pointerId: e.pointerId, startX: e.clientX, moved: false, el: target };
+        });
+
+        document.getElementById('sheetPane').addEventListener('pointermove', (e) => {
+            if (!chordDragState || e.pointerId !== chordDragState.pointerId) return;
+            const dx = e.clientX - chordDragState.startX;
+            if (!chordDragState.moved && Math.abs(dx) > 4) {
+                chordDragState.moved = true;
+                chordDragState.el.classList.add('dragging');
+                chordDragState.el.setPointerCapture(chordDragState.pointerId);
+            }
+            if (chordDragState.moved) {
+                chordDragState.el.style.transform = `translateX(${dx}px)`;
+            }
+        });
+
+        function endChordDrag(e) {
+            if (!chordDragState || e.pointerId !== chordDragState.pointerId) return;
+            const { lineIdx, chordIdx, moved, el, startX } = chordDragState;
+            el.style.transform = '';
+            el.classList.remove('dragging');
+            if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+            chordDragState = null;
+            if (moved) {
+                suppressNextChordClick = true;
+                const scale = estimateLocalPixelsPerMeasure(lineIdx, chordIdx);
+                if (scale) nudgeChordTiming(lineIdx, chordIdx, (e.clientX - startX) / scale);
+            }
+        }
+        document.getElementById('sheetPane').addEventListener('pointerup', endChordDrag);
+        document.getElementById('sheetPane').addEventListener('pointercancel', endChordDrag);
+
+        document.getElementById('sheetPane').addEventListener('click', (e) => {
+            if (suppressNextChordClick) { suppressNextChordClick = false; return; }
+            if (!document.getElementById('sourceViewTagged').checked) return;
+
+            const target = e.target.closest('.chord-label');
+            if (target) {
+                const lineIdx = parseInt(target.dataset.lineIdx, 10);
+                const chordIdx = parseInt(target.dataset.chordIdx, 10);
+                if (isNaN(lineIdx) || isNaN(chordIdx)) return;
+                e.stopPropagation();
+                showDurationPopup(target, lineIdx, chordIdx);
+                return;
+            }
+
+            // Shift-click on the tick-marks row (not the chord-name row
+            // below it, and not a plain click - too easy to fire by
+            // accident) inserts a new chord there - see insertChordAt. The
+            // tick row is the click target specifically so the cursor can
+            // land precisely on a tick, rather than aiming through the
+            // chord names themselves; the x position is the same either
+            // way, so findInsertionGap/insertChordAt need no changes.
+            if (!e.shiftKey) return;
+            const ticks = e.target.closest('.sheet-ticks');
+            const lineEl = ticks && ticks.closest('.sheet-line');
+            const lineIdx = lineEl ? parseInt(lineEl.dataset.lineIdx, 10) : NaN;
+            if (isNaN(lineIdx)) return;
             e.stopPropagation();
-            showDurationPopup(target, lineIdx, chordIdx);
+            const targetChordIdx = findInsertionGap(lineIdx, e.clientX);
+            insertChordAt(lineIdx, targetChordIdx, e.clientX);
+            const newTarget = document.querySelector(`#sheetPane .chord-label[data-line-idx="${lineIdx}"][data-chord-idx="${targetChordIdx}"]`);
+            if (newTarget) {
+                showDurationPopup(newTarget, lineIdx, targetChordIdx);
+                const nameInput = document.getElementById('durationPopupChord');
+                nameInput.focus();
+                nameInput.select();
+            }
         });
 
         // Right-click a chord to designate it as where the *next* Scroll
@@ -3116,7 +4392,7 @@
             reader.readAsText(file);
         });
 
-        const dropZone = document.getElementById('chordproInput');
+        const dropZone = document.getElementById('rawPane');
         dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
             dropZone.classList.add('drag-over');

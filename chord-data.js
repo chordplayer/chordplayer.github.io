@@ -2530,7 +2530,9 @@
         // a delay line the length of one period, damping slightly each pass, which
         // naturally produces the bright-attack / warm-decay character of a picked
         // steel string (unlike a bare oscillator, which has no attack transient).
-        function createPluckedStringBuffer(ctx, freq, duration) {
+        // `decay` (per-pass damping) controls how quickly that brightness fades -
+        // lower decays toward a duller, shorter-sustaining tone.
+        function createPluckedStringBuffer(ctx, freq, duration, decay = 0.994) {
             const sampleRate = ctx.sampleRate;
             const bufferLength = Math.floor(sampleRate * duration);
             const buffer = ctx.createBuffer(1, bufferLength, sampleRate);
@@ -2542,7 +2544,6 @@
                 ringBuffer[i] = Math.random() * 2 - 1;
             }
 
-            const decay = 0.994;
             let idx = 0;
             for (let n = 0; n < bufferLength; n++) {
                 const current = ringBuffer[idx];
@@ -2555,44 +2556,194 @@
             return buffer;
         }
 
-        function playChord(frets, strumDelay = 0.07, noteDuration = 2.2) {
+        // Instrument/tone presets layered on top of the same Karplus-Strong
+        // pluck: acoustic tones keep a plain highpass/lowpass shape; electric
+        // tones narrow the passband (mimicking a magnetic pickup's rolled-off
+        // highs and lows) and sustain longer. Crunch adds a soft-clip
+        // waveshaper for mild amp overdrive.
+        // reverbMix is how much of each note is sent to the synthesized body/room
+        // resonance (see getReverbImpulse) - acoustic bodies resonate more than a
+        // solid electric body, so acoustic tones carry more of it.
+        const TONE_PRESETS = {
+            'acoustic-warm': { decay: 0.994, highpass: 70, lowpass: 6500, lowpassQ: 0.7, gain: 0.4, distortion: 0, reverbMix: 0.16 },
+            'acoustic-bright': { decay: 0.991, highpass: 90, lowpass: 9500, lowpassQ: 0.6, gain: 0.4, distortion: 0, reverbMix: 0.14 },
+            'electric-clean': { decay: 0.997, highpass: 120, lowpass: 4200, lowpassQ: 1.2, gain: 0.42, distortion: 0, reverbMix: 0.08 },
+            'electric-crunch': { decay: 0.997, highpass: 140, lowpass: 3800, lowpassQ: 1.4, gain: 0.38, distortion: 28, reverbMix: 0.06 },
+        };
+
+        // Short synthesized impulse response standing in for guitar-body/room
+        // resonance - exponentially-decaying filtered noise, the standard
+        // lightweight way to get a convincing "room" without shipping an audio
+        // asset. Built once per AudioContext and reused by every note's
+        // ConvolverNode (only the buffer is shared; each note gets its own node).
+        let cachedReverbImpulse = null;
+        function getReverbImpulse(ctx) {
+            if (cachedReverbImpulse) return cachedReverbImpulse;
+            const duration = 0.28;
+            const length = Math.floor(ctx.sampleRate * duration);
+            const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+            for (let ch = 0; ch < 2; ch++) {
+                const data = impulse.getChannelData(ch);
+                for (let i = 0; i < length; i++) {
+                    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2.5);
+                }
+            }
+            cachedReverbImpulse = impulse;
+            return impulse;
+        }
+
+        // Standard soft-clip waveshaper curve (k controls how hard the clip
+        // bends) - a common formula for musical, non-harsh distortion.
+        function makeDistortionCurve(amount) {
+            const samples = 1024;
+            const curve = new Float32Array(samples);
+            const deg = Math.PI / 180;
+            for (let i = 0; i < samples; i++) {
+                const x = (i * 2) / samples - 1;
+                curve[i] = ((3 + amount) * x * 20 * deg) / (Math.PI + amount * Math.abs(x));
+            }
+            return curve;
+        }
+
+        // Every currently-ringing note started by playChord (below), so a
+        // caller doing timed/scheduled playback (e.g. songsheet.html's
+        // Scroll/Play Chords) can cut them all short on demand - see
+        // stopAllChordAudio. Each note's noteDuration can be several
+        // seconds (a long, slowly-decaying pluck), so without this a note
+        // struck right before playback is stopped keeps ringing well past
+        // the stop, and can still be audible when playback resumes,
+        // overlapping the newly-triggered notes and sounding like the
+        // chord playing twice, out of time with itself.
+        let activeChordAudioNodes = [];
+
+        // direction 'down': every fretted/open string, low string to high,
+        // as a real down strum crosses them. direction 'up': only the
+        // highest 2-3 fretted/open strings (skipping any muted 'x' string in
+        // that voicing), struck high to low, mimicking how an up-strum
+        // naturally catches fewer, thinner strings. `tone` selects one of
+        // TONE_PRESETS (falls back to acoustic-warm, the original tone).
+        // `accent` marks a chord-change/downbeat strum, which plays at the
+        // tone's normal reference volume; every other strum plays at
+        // `nonAccentVolume` (0 = silent, 1 = same volume as an accented
+        // strum) - lets the caller expose this as a user-adjustable slider
+        // rather than a fixed amount, since a fixed boost read as too subtle.
+        // `masterVolume` (0-1) scales the whole strum on top of that - the
+        // overall "Chord Vol" slider, for balancing against the metronome/
+        // video when more than one is sounding at once.
+        function playChord(frets, strumDelay = 0.07, noteDuration = 2.2, direction = 'down', tone = 'acoustic-warm', accent = false, nonAccentVolume = 0.25, masterVolume = 1) {
             const ctx = getAudioContext();
             const now = ctx.currentTime;
+            const preset = TONE_PRESETS[tone] || TONE_PRESETS['acoustic-warm'];
+            const accentMultiplier = accent ? 1 : Math.max(0, nonAccentVolume);
+
+            let stringIndices;
+            if (direction === 'up') {
+                stringIndices = [];
+                for (let i = frets.length - 1; i >= 0 && stringIndices.length < 3; i--) {
+                    const fret = frets[i];
+                    if (fret === 'x' || fret === null || fret === undefined) continue;
+                    stringIndices.push(i);
+                }
+            } else {
+                stringIndices = frets.map((fret, i) => i).filter(i => {
+                    const fret = frets[i];
+                    return fret !== 'x' && fret !== null && fret !== undefined;
+                });
+            }
 
             let strumIndex = 0;
-            frets.forEach((fret, stringIndex) => {
-                if (fret === 'x' || fret === null || fret === undefined) return;
+            stringIndices.forEach((stringIndex) => {
+                const fret = frets[stringIndex];
 
-                const freq = standardTuningFreqs[stringIndex] * Math.pow(2, fret / 12);
-                const startTime = now + strumIndex * strumDelay;
+                // Small per-pluck randomization so repeated strums of the same
+                // chord don't sound identically robotic, the way a real strum
+                // never lands two strings at exactly the same instant/pitch/
+                // volume twice: a few cents of detune, +/-8% loudness, and a
+                // timing nudge within the strum (kept well inside strumDelay
+                // so string order never audibly reorders).
+                const detuneCents = (Math.random() - 0.5) * 8;
+                const freq = standardTuningFreqs[stringIndex] * Math.pow(2, fret / 12) * Math.pow(2, detuneCents / 1200);
+                const timingJitter = (Math.random() - 0.5) * strumDelay * 0.3;
+                const startTime = Math.max(now, now + strumIndex * strumDelay + timingJitter);
+                const noteGain = preset.gain * accentMultiplier * Math.max(0, masterVolume) * (0.92 + Math.random() * 0.16);
                 strumIndex++;
 
-                const buffer = createPluckedStringBuffer(ctx, freq, noteDuration);
+                const buffer = createPluckedStringBuffer(ctx, freq, noteDuration, preset.decay);
                 const source = ctx.createBufferSource();
                 source.buffer = buffer;
 
-                // Shape the raw pluck toward steel-string tone: cut rumble, tame harshness.
+                // Shape the raw pluck toward the selected tone: cut rumble, tame harshness.
                 const highpass = ctx.createBiquadFilter();
                 highpass.type = 'highpass';
-                highpass.frequency.value = 70;
+                highpass.frequency.value = preset.highpass;
 
                 const lowpass = ctx.createBiquadFilter();
                 lowpass.type = 'lowpass';
-                lowpass.frequency.value = 6500;
-                lowpass.Q.value = 0.7;
+                lowpass.frequency.value = preset.lowpass;
+                lowpass.Q.value = preset.lowpassQ;
 
                 const gain = ctx.createGain();
-                gain.gain.setValueAtTime(0.4, startTime);
+                gain.gain.setValueAtTime(noteGain, startTime);
                 // Fade the tail to silence just before the buffer ends to avoid a click.
-                gain.gain.setValueAtTime(0.4, startTime + noteDuration - 0.05);
+                gain.gain.setValueAtTime(noteGain, startTime + noteDuration - 0.05);
                 gain.gain.linearRampToValueAtTime(0, startTime + noteDuration);
 
                 source.connect(highpass);
                 highpass.connect(lowpass);
-                lowpass.connect(gain);
+                let shaped = lowpass;
+                if (preset.distortion > 0) {
+                    const shaper = ctx.createWaveShaper();
+                    shaper.curve = makeDistortionCurve(preset.distortion);
+                    shaper.oversample = '2x';
+                    lowpass.connect(shaper);
+                    shaped = shaper;
+                }
+                shaped.connect(gain);
+
+                // Body/room resonance send - mixed in before `gain`'s own
+                // envelope, so the reverb tail fades out together with the
+                // dry note instead of ringing on past it.
+                if (preset.reverbMix > 0) {
+                    const convolver = ctx.createConvolver();
+                    convolver.buffer = getReverbImpulse(ctx);
+                    convolver.normalize = true;
+                    const reverbGain = ctx.createGain();
+                    reverbGain.gain.value = preset.reverbMix;
+                    shaped.connect(convolver);
+                    convolver.connect(reverbGain);
+                    reverbGain.connect(gain);
+                }
+
                 gain.connect(ctx.destination);
 
                 source.start(startTime);
                 source.stop(startTime + noteDuration);
+
+                const entry = { source, gain };
+                activeChordAudioNodes.push(entry);
+                source.onended = () => {
+                    const idx = activeChordAudioNodes.indexOf(entry);
+                    if (idx !== -1) activeChordAudioNodes.splice(idx, 1);
+                };
             });
+        }
+
+        // Immediately silences every note still ringing from playChord -
+        // see activeChordAudioNodes above for why this matters. Ramps each
+        // note's gain to 0 over a few milliseconds (rather than stopping it
+        // outright) to avoid an audible click.
+        function stopAllChordAudio() {
+            const ctx = getAudioContext();
+            const now = ctx.currentTime;
+            activeChordAudioNodes.forEach(({ source, gain }) => {
+                try {
+                    gain.gain.cancelScheduledValues(now);
+                    gain.gain.setValueAtTime(gain.gain.value, now);
+                    gain.gain.linearRampToValueAtTime(0, now + 0.03);
+                    source.stop(now + 0.04);
+                } catch (e) {
+                    // Already stopped/ended - nothing to do.
+                }
+            });
+            activeChordAudioNodes = [];
         }
