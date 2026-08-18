@@ -301,6 +301,29 @@
         background: #1558b0;
     }
 
+    /* Red "stop" state - applied to #scrollToggleBtn/#metronomePlayBtn
+       while whichever they control is actively running (see
+       setScrollButtonRunning/startStandaloneMetronome/
+       stopStandaloneMetronome), so it's visually obvious the button now
+       stops something rather than starts it. */
+    .player-btn-stop {
+        background: #d93025;
+    }
+
+    .player-btn-stop:hover {
+        background: #b1271b;
+    }
+
+    /* Top always reads as a distinct "navigate" action, not a
+       start/stop toggle like Scroll/the metronome button next to it. */
+    #topBtn {
+        background: #1e8e3e;
+    }
+
+    #topBtn:hover {
+        background: #187a34;
+    }
+
     /* Fixed, shared width so Top (row 1) and Scroll (row 2) - each the
        first control in its row - line up in the same column and read as a
        stacked pair. */
@@ -2785,6 +2808,16 @@
             document.getElementById('bpmLabel').textContent = bpm + ' BPM';
         }
 
+        // Sets #scrollToggleBtn's label and red "stop" styling together -
+        // called from every place that flips it between Scroll/Stop
+        // (startScrolling, stopScrolling, startCountIn, haltPlayback) so
+        // the two never drift out of sync with each other.
+        function setScrollButtonRunning(running) {
+            const btn = document.getElementById('scrollToggleBtn');
+            btn.innerHTML = running ? '&#9724; Stop' : '&#9654; Scroll';
+            btn.classList.toggle('player-btn-stop', running);
+        }
+
         // Chord timing is purely position-based in MEASURE units (see
         // computeMeasureTiming), independent of BPM - a chord's scheduled
         // position is "measure 3.5" regardless of tempo. Elapsed playback
@@ -3017,13 +3050,13 @@
 
             isScrolling = true;
             lastFrameTime = null;
-            document.getElementById('scrollToggleBtn').innerHTML = '&#9724; Stop';
+            setScrollButtonRunning(true);
             requestAnimationFrame(scrollStep);
         }
 
         function stopScrolling() {
             isScrolling = false;
-            document.getElementById('scrollToggleBtn').innerHTML = '&#9654; Scroll';
+            setScrollButtonRunning(false);
             stopMetronome();
             clearChordHighlight();
             stopAllChordAudio();
@@ -3450,10 +3483,16 @@
         }
 
         function startStandaloneMetronome() {
+            // Same viewport reposition Scroll does on press (see
+            // beginCountInThenScroll) - brings the settings bar/player
+            // controls into view the same way, for consistency.
+            document.querySelector('.chordplayer-bar').scrollIntoView({ behavior: 'auto', block: 'start' });
             standaloneBeatCount = 0;
             standaloneMetronomeTick();
             standaloneMetronomeInterval = setInterval(standaloneMetronomeTick, (60 / bpm) * 1000);
-            document.getElementById('metronomePlayBtn').innerHTML = '&#9724;';
+            const btn = document.getElementById('metronomePlayBtn');
+            btn.innerHTML = '&#9724;';
+            btn.classList.add('player-btn-stop');
         }
 
         // Same "reschedule the interval, keep the beat position" pattern as
@@ -3471,7 +3510,9 @@
                 standaloneMetronomeInterval = null;
                 updateBeatDisplay(0, getBeatsPerMeasure());
             }
-            document.getElementById('metronomePlayBtn').innerHTML = '&#9654;';
+            const btn = document.getElementById('metronomePlayBtn');
+            btn.innerHTML = '&#9654;';
+            btn.classList.remove('player-btn-stop');
         }
 
         // Click-to-resync: while the standalone metronome is running,
@@ -3498,7 +3539,7 @@
         // tempo-change resume (also 2 beats - see resumeAfterTempoChange).
         function startCountIn(ticks, onCountInEnd) {
             isCountingIn = true;
-            document.getElementById('scrollToggleBtn').innerHTML = '&#9724; Stop';
+            setScrollButtonRunning(true);
             countInTicks = ticks;
             startMetronome();
 
@@ -3647,7 +3688,7 @@
             stopMetronome();
             clearChordHighlight();
             stopAllChordAudio();
-            document.getElementById('scrollToggleBtn').innerHTML = '&#9654; Scroll';
+            setScrollButtonRunning(false);
             updateResumeFlashDOM();
         }
 
