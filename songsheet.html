@@ -385,6 +385,41 @@
         color: #666;
     }
 
+    .transpose-control {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: #666;
+    }
+
+    .transpose-control button {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 1px solid #ccc;
+        background: #fafafa;
+        font-size: 15px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0;
+    }
+
+    .transpose-control button:hover {
+        background: #f0f0f0;
+    }
+
+    .transpose-control button:disabled {
+        opacity: 0.4;
+        cursor: default;
+        background: #fafafa;
+    }
+
+    #transposeOffsetLabel {
+        min-width: 2em;
+        font-variant-numeric: tabular-nums;
+    }
+
     .chord-duration-control select {
         padding: 4px 6px;
         font-size: 13px;
@@ -570,12 +605,18 @@
 
     .video-speed-control select {
         flex: 1;
+        min-width: 0;
         padding: 3px 4px;
         font-size: 11px;
     }
 
+    /* A native <input type="range"> has an intrinsic min-width flexbox
+       won't shrink below by default, which at this panel's width (halved
+       from its original size) overflowed the slider clean outside the
+       panel instead of shrinking to fit. */
     .video-speed-control input[type="range"] {
         flex: 1;
+        min-width: 0;
     }
 
     .video-position-label {
@@ -632,6 +673,20 @@
         font-size: 11px;
         color: #666;
         margin-top: 2px;
+    }
+
+    .legend-cell-cyclable .legend-diagram {
+        cursor: pointer;
+    }
+
+    .legend-cell-cyclable .legend-diagram:hover svg {
+        opacity: 0.75;
+    }
+
+    .legend-voicing-badge {
+        font-size: 10px;
+        color: #888;
+        margin-top: 1px;
     }
 
     .legend-missing {
@@ -693,6 +748,15 @@
         font-weight: 700;
     }
 
+    /* Used only for a lyric-only line with no chords above it - no
+       character-position alignment to any other row to preserve, so it can
+       just wrap normally instead of needing the character-budget wrap math
+       every chorded line goes through (see wrapTextRanges). */
+    .sheet-lyric-wrap {
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+    }
+
     /* Classic chord-above-lyric-character annotation - used when "Mark time"
        is off, ignoring any computed/tagged measure timing entirely. Must
        match .sheet-lyric's font-size exactly - character alignment between
@@ -716,14 +780,48 @@
        see buildEvenGridHTML. */
     .sheet-grid {
         position: relative;
-        height: 26px;
+        height: 35px;
         font-family: 'Nimbus Mono PS', 'Courier New', Courier, monospace;
         font-size: 15px;
     }
 
-    .sheet-ticks {
+    /* A dedicated 9px band above the ticks, purely for measure numbers
+       (see .tick-measure-number) - keeping it a separate row, rather than
+       floating the number sideways off its tick, is what stops the number
+       from visually drifting over a neighboring tick when chords are
+       packed close together (a 2-digit number is often wider than the gap
+       between adjacent ticks in a busy measure). */
+    .sheet-measure-numbers {
         position: absolute;
         top: 0;
+        left: 0;
+        right: 0;
+        height: 9px;
+    }
+
+    /* No font-size of its own - "ch" is relative to an element's OWN font
+       size, so giving this a smaller font-size than .sheet-grid's 15px
+       (which the tick marks' "Nch" left offsets are computed against)
+       would make identical "Nch" values resolve to different pixel
+       offsets on the number vs. its own tick - a small, silent
+       misalignment that grows with N (worse further into a line). It
+       inherits 15px instead, and is scaled down visually via transform
+       (applied after layout, so it doesn't affect the "ch" calculation)
+       rather than via font-size. */
+    .tick-measure-number {
+        position: absolute;
+        bottom: 0;
+        transform: translateX(-50%) scale(0.55);
+        transform-origin: bottom;
+        font-weight: 700;
+        line-height: 1;
+        color: #888;
+        white-space: nowrap;
+    }
+
+    .sheet-ticks {
+        position: absolute;
+        top: 9px;
         left: 0;
         right: 0;
         height: 10px;
@@ -748,7 +846,7 @@
 
     .sheet-chords-grid {
         position: absolute;
-        top: 10px;
+        top: 19px;
         left: 0;
         right: 0;
         height: 16px;
@@ -779,7 +877,7 @@
         opacity: 0.4;
     }
 
-    /* A chord's own {cpl_m:D} duration is only editable while viewing
+    /* A chord's own {x_cpl_m:D} duration is only editable while viewing
        "ChordPlayer" - #sheetPane gets this class then (see syncPaneDisplay).
        Also draggable there (left/right along its own line) to reorder it -
        see wireChordLabelClicks/moveChordWithinLine. */
@@ -1106,6 +1204,48 @@
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
+
+        /* Fixed print font sizes (see getPrintWrapMaxChars, which measures
+           these exact sizes to compute where lines wrap) - wrapping, not
+           shrinking, is what keeps text from running off the page edge. */
+        .sheet-lyric, .sheet-chords, .sheet-grid {
+            font-size: 12pt;
+        }
+        .sheet-title {
+            font-size: 22pt;
+        }
+
+        /* Chord names (.chord-label, inside .sheet-grid, and .sheet-chords
+           in classic-annotation mode) are already font-weight:700 - but so
+           is .sheet-lyric, so on screen they're equally bold and don't
+           stand out from each other. Only the lyric row's weight is
+           dropped here, print-only, so the existing chord bold reads as
+           bold BY CONTRAST against normal-weight lyrics, the standard
+           chord-sheet convention. */
+        .sheet-lyric {
+            font-weight: 400;
+        }
+
+        /* "Black & White" PDF mode (see #printColorBw) - every bit
+           of ink pure #000, no grays/blue. Diagram SVGs are handled
+           separately (see drawChordDiagram's monochrome param in
+           chord-data.js) since their colors are inline presentation
+           attributes generated per-render, not something a CSS override
+           could distinguish from the deliberate white/none fills those
+           same diagrams also use for contrast/hollow rings. */
+        .print-sheet.print-bw .sheet-title,
+        .print-sheet.print-bw .sheet-subtitle,
+        .print-sheet.print-bw .sheet-meta,
+        .print-sheet.print-bw .sheet-section-label,
+        .print-sheet.print-bw .sheet-comment,
+        .print-sheet.print-bw .sheet-lyric,
+        .print-sheet.print-bw .sheet-chords,
+        .print-sheet.print-bw .chord-label,
+        .print-sheet.print-bw .legend-chord-name,
+        .print-sheet.print-bw .legend-intervals,
+        .print-sheet.print-bw .legend-missing {
+            color: #000 !important;
+        }
     }
 
     /* Chrome's browser-default print margin is ~0.4in (~38px); this sets it
@@ -1113,8 +1253,10 @@
     @page {
         margin-top: .6in;
         margin-bottom: .6in;
+        margin-left: .4in;
     }
 </style>
+<style id="printMarginOverride"></style>
 </head>
 <body>
     <nav class="site-nav">
@@ -1138,6 +1280,10 @@
                 <button class="print-btn" id="saveBtn">Save ChordPlayer</button>
                 <button class="print-btn" id="printBtn">Print / Save PDF</button>
                 <label class="print-diagrams-toggle"><input type="checkbox" id="printDiagramsCheck" checked disabled> Print diagrams</label>
+                <div class="segmented">
+                    <label><input type="radio" name="printColorMode" id="printColorColor" checked> Color</label>
+                    <label><input type="radio" name="printColorMode" id="printColorBw"> B&amp;W</label>
+                </div>
             </div>
         </div>
         <div class="settings-row">
@@ -1170,6 +1316,12 @@
                     <option value="0.5">Half measure</option>
                     <option value="0.25">Quarter measure</option>
                 </select>
+            </div>
+            <div class="transpose-control">
+                <button type="button" id="transposeMinusBtn" title="Transpose down a semitone">&minus;</button>
+                <span>Transpose</span>
+                <button type="button" id="transposePlusBtn" title="Transpose up a semitone">+</button>
+                <span id="transposeOffsetLabel">+0</span>
             </div>
         </div>
     </div>
@@ -1319,18 +1471,137 @@
     <script src="https://www.youtube.com/iframe_api"></script>
     <script src="chord-data.js"></script>
     <script>
+        // --- Import cleanup ---
+
+        // Recognizes a capo mention written as ordinary text or a fake
+        // "[Capo N]" chord bracket - common when copy-pasting from tab
+        // sites - and folds it into a proper {capo: N} directive instead
+        // of leaving it as loose, unparsed text (or a fake chord that
+        // would otherwise show up in the legend as "no diagram"). Skips
+        // directive lines entirely, so a file that already has a correct
+        // {capo: N} tag - and no other stray mention - is left untouched;
+        // skips tab-notation lines for the same reason
+        // cleanImportedChordProText does.
+        function normalizeCapoDirective(text) {
+            const lines = text.split(/\r?\n/);
+            let inTab = false;
+            const tabDirectiveRe = /^\s*\{(start_of_tab|sot|end_of_tab|eot)\}\s*$/i;
+            const directiveRe = /^\s*\{.*\}\s*$/;
+            const capoRe = /\[?\s*capo\b[\s:.\-]{0,3}(?:on|at|is)?\s*(?:the\s*)?(\d{1,2})(?:st|nd|rd|th)?\s*(?:fret)?\s*\]?/i;
+
+            let foundFret = null;
+            const cleaned = lines.map((line) => {
+                const tabMatch = line.match(tabDirectiveRe);
+                if (tabMatch) {
+                    inTab = /^(start_of_tab|sot)$/i.test(tabMatch[1]);
+                    return line;
+                }
+                if (inTab || directiveRe.test(line.trim())) return line;
+
+                const m = line.match(capoRe);
+                if (!m) return line;
+                if (foundFret == null) foundFret = m[1];
+                return line.slice(0, m.index) + line.slice(m.index + m[0].length);
+            });
+
+            let out = cleaned.join('\n');
+            if (foundFret != null) out = upsertDirective(out, 'capo', foundFret);
+            return out;
+        }
+
+        // Collapses accidental double/triple spaces down to one, and drops
+        // any [chord] bracket whose content is empty, all whitespace, or
+        // nothing but punctuation (e.g. a stray "[ ]" or "[--]" left over
+        // from a messy paste/OCR/export) - applied once, right when a
+        // file/paste is first loaded (see ingestSource), so both the
+        // ChordPro and ChordPlayer buffers derive from already-clean text
+        // rather than each needing their own cleanup pass. Tab-notation
+        // lines ({start_of_tab}...{end_of_tab}) are passed through
+        // untouched, since their spacing is deliberate ASCII art, not
+        // lyric formatting.
+        function cleanImportedChordProText(text) {
+            const lines = text.split(/\r?\n/);
+            let inTab = false;
+            const tabDirectiveRe = /^\s*\{(start_of_tab|sot|end_of_tab|eot)\}\s*$/i;
+
+            const cleaned = lines.map((line) => {
+                const tabMatch = line.match(tabDirectiveRe);
+                if (tabMatch) {
+                    inTab = /^(start_of_tab|sot)$/i.test(tabMatch[1]);
+                    return line;
+                }
+                if (inTab) return line;
+
+                // Drop empty/whitespace/punctuation-only chord brackets,
+                // along with any {x_cpl_m:...} duration tag immediately
+                // preceding them - a tag with nothing left to attach to.
+                // Accepts the legacy pre-x_-prefix "cpl_m" name too, so an
+                // older saved file still cleans up correctly.
+                let out = line.replace(/(\{(?:x_)?cpl_m:[^}]*\})?\[([^\]]*)\]/gi, (m, tag, content) => {
+                    return /^[\s\p{P}]*$/u.test(content) ? '' : m;
+                });
+
+                // Collapse runs of plain spaces - whether already in the
+                // source or left behind by the removal above - down to one.
+                out = out.replace(/ {2,}/g, ' ');
+                return out;
+            });
+
+            return cleaned.join('\n');
+        }
+
         // --- ChordPro parsing ---
+
+        // Parses one {define: NAME base-fret N frets F1 F2 F3 F4 F5 F6
+        // [fingers ...]} directive's value (the "NAME base-fret ... frets
+        // ..." part, after the directive name/colon are already stripped)
+        // per the standard ChordPro chord-definition syntax. Any trailing
+        // "fingers" list is recognized (so it doesn't get misread as more
+        // fret values) but not kept - this app doesn't render finger
+        // numbers. Returns null for anything that isn't a straightforward
+        // 6-string definition, so an odd/malformed {define:} is simply
+        // ignored rather than risking a bad voicing.
+        function parseDefineDirective(val) {
+            const tokens = val.trim().split(/\s+/);
+            if (!tokens.length || !tokens[0]) return null;
+            const name = tokens[0];
+            let baseFret = 1;
+            let frets = null;
+            const fretTokenRe = /^-?\d+$|^x$/i;
+            for (let i = 1; i < tokens.length; i++) {
+                const t = tokens[i].toLowerCase();
+                if (t === 'base-fret') {
+                    baseFret = parseInt(tokens[++i], 10) || 1;
+                } else if (t === 'frets') {
+                    frets = [];
+                    while (i + 1 < tokens.length && frets.length < 6 && fretTokenRe.test(tokens[i + 1])) {
+                        frets.push(tokens[++i]);
+                    }
+                } else if (t === 'fingers') {
+                    while (i + 1 < tokens.length && fretTokenRe.test(tokens[i + 1])) i++;
+                }
+            }
+            if (!frets || frets.length !== 6) return null;
+            return { name, baseFret, frets };
+        }
 
         function parseChordPro(text) {
             const lines = text.split(/\r?\n/);
-            const song = { title: '', subtitle: '', artist: '', key: '', capo: '', time: '', tempo: '', videoUrl: '', sections: [] };
+            const song = { title: '', subtitle: '', artist: '', key: '', capo: '', time: '', tempo: '', videoUrl: '', customDefines: [], sections: [] };
             let currentSection = { type: 'verse', label: null, lines: [] };
             let inTab = false;
-            // {cpl_m:D} tags (inline, immediately before a chord bracket) set
-            // that chord's ring duration in measures, overriding the fixed
-            // chord-duration setting - see chordpro_time_tags.md. A chord's
-            // position is never tagged directly; it's always the running sum
-            // of every duration before it (see computeMeasureTiming).
+            // {x_cpl_m:D} tags (inline, immediately before a chord bracket)
+            // set that chord's ring duration in measures, overriding the
+            // fixed chord-duration setting - see chordpro_time_tags.md. A
+            // chord's position is never tagged directly; it's always the
+            // running sum of every duration before it (see
+            // computeMeasureTiming). "x_cpl_m"/"x_cpl_v" are ChordPlayer's
+            // own namespaced ChordPro extensions (the required "x_" prefix
+            // per the ChordPro spec's custom-extension convention, "cpl"
+            // being ChordPlayer's own namespace) - see CHORDPRO_TAGS.md.
+            // The pre-"x_"-prefix names ("cpl_m"/"cpl_v") are still
+            // accepted on read for files saved before this rename, but
+            // never written.
 
             const pushSection = () => {
                 if (currentSection.lines.length > 0) song.sections.push(currentSection);
@@ -1338,7 +1609,8 @@
 
             const directiveRe = /^\{([^:}]+)(?::\s*(.*))?\}$/;
 
-            for (const raw of lines) {
+            for (let rawIdx = 0; rawIdx < lines.length; rawIdx++) {
+                const raw = lines[rawIdx];
                 const line = raw.trim();
 
                 if (line === '') {
@@ -1358,7 +1630,12 @@
                         case 'capo': song.capo = val; break;
                         case 'time': song.time = val; break;
                         case 'tempo': song.tempo = val; break;
-                        case 'cpl_v': song.videoUrl = val; break;
+                        case 'x_cpl_v': case 'cpl_v': song.videoUrl = val; break;
+                        case 'define': {
+                            const def = parseDefineDirective(val);
+                            if (def) song.customDefines.push(def);
+                            break;
+                        }
                         case 'comment': case 'c': case 'comment_italic': case 'ci':
                             currentSection.lines.push({ type: 'comment', text: val });
                             break;
@@ -1402,7 +1679,16 @@
                     continue;
                 }
 
-                if (inTab) {
+                // A tab-block line is normally taken 100% verbatim (real
+                // ASCII fretboard notation never contains "[" - fret
+                // numbers/dashes/string labels only), but a line that DOES
+                // contain a real [chord] bracket falls through to the exact
+                // same chord/lyric parsing every other line gets, becoming
+                // a normal 'line' entry mixed in among 'tabline' entries.
+                // This is what lets a tab block's "sections" only be a
+                // rendering-style distinction, not a chord-parsing one -
+                // see CHORDPRO_TAGS.md.
+                if (inTab && !line.includes('[')) {
                     currentSection.lines.push({ type: 'tabline', text: raw });
                     continue;
                 }
@@ -1415,9 +1701,10 @@
                     if (line[i] === '{') {
                         const end = line.indexOf('}', i);
                         if (end !== -1) {
-                            // {cpl_m:D} - ring duration in measures for the
-                            // chord immediately following it.
-                            const inlineMatch = line.slice(i + 1, end).match(/^cpl_m:\s*(\d+(?:\.\d+)?|\.\d+)\s*$/i);
+                            // {x_cpl_m:D} - ring duration in measures for
+                            // the chord immediately following it. Legacy
+                            // pre-"x_"-prefix "cpl_m" still accepted on read.
+                            const inlineMatch = line.slice(i + 1, end).match(/^(?:x_)?cpl_m:\s*(\d+(?:\.\d+)?|\.\d+)\s*$/i);
                             if (inlineMatch) {
                                 pendingInlineMeasureDuration = parseFloat(inlineMatch[1]);
                                 i = end + 1;
@@ -1437,7 +1724,7 @@
                     lyric += line[i];
                     i++;
                 }
-                currentSection.lines.push({ type: 'line', lyric, chords });
+                currentSection.lines.push({ type: 'line', lyric, chords, _rawLine: rawIdx });
             }
             pushSection();
             if (!song.time) song.time = '4/4';
@@ -1453,7 +1740,7 @@
         // chord's position is never stored directly - it's always the
         // running sum of every duration before it, continuous across the
         // whole song (a line break does NOT reset it). Each chord's own
-        // duration comes from its {cpl_m:D} tag if present, otherwise the
+        // duration comes from its {x_cpl_m:D} tag if present, otherwise the
         // fixed chordDurationMeasures default. No syllable counting or
         // lyric-shape heuristics are involved.
         function computeMeasureTiming(song, chordDurationMeasures) {
@@ -1470,8 +1757,6 @@
             let seenFirstChord = false;
 
             for (const section of song.sections) {
-                if (section.type === 'tab') continue;
-
                 for (const line of section.lines) {
                     if (line.type !== 'line') continue;
 
@@ -1502,7 +1787,7 @@
 
                     lineTimings.push({ lineIdx, measureStart: lineStart, measureEnd: cursor, chordPositions, hasLyric });
                     for (const cp of chordPositions) {
-                        // A {cpl_m:0} chord is a carry-over marker, not a
+                        // A {x_cpl_m:0} chord is a carry-over marker, not a
                         // new strum - it's shown on the sheet but never
                         // triggers chord-playback audio.
                         if (cp.measureDuration === 0) continue;
@@ -1520,7 +1805,7 @@
         // --- Tagged ChordPro generation ---
         //
         // Serializes a song + its computed timing back into ChordPro text with
-        // explicit {cpl_m:D} duration tags inserted. Each chord gets its own
+        // explicit {x_cpl_m:D} duration tags inserted. Each chord gets its own
         // tag placed immediately before it, with exactly its computed
         // duration - so re-parsing this text and re-running
         // computeMeasureTiming on it reproduces the identical chord schedule.
@@ -1565,49 +1850,49 @@
                 else if (section.type === 'tab') { out.push('{start_of_tab}'); bodyStarted = true; }
                 else if (section.type === 'verse' && section.label) { out.push(`{start_of_verse: ${section.label}}`); bodyStarted = true; }
 
-                if (section.type === 'tab') {
-                    for (const l of section.lines) {
-                        if (l.type === 'tabline') { out.push(l.text); bodyStarted = true; }
+                // A 'tab' section can hold a mix of 'tabline' (real ASCII
+                // notation, pushed verbatim) and 'line' entries (a tab line
+                // that had a real [chord] bracket on it - see parseChordPro)
+                // in original document order - the same loop other section
+                // types use, just with the extra tabline case.
+                for (const line of section.lines) {
+                    if (line.type === 'tabline') { out.push(line.text); bodyStarted = true; continue; }
+                    if (line.type === 'blank') {
+                        if (bodyStarted) out.push('');
+                        continue;
                     }
-                } else {
-                    for (const line of section.lines) {
-                        if (line.type === 'blank') {
-                            if (bodyStarted) out.push('');
-                            continue;
-                        }
-                        bodyStarted = true;
-                        if (line.type === 'comment') { out.push(`{comment: ${line.text}}`); continue; }
+                    bodyStarted = true;
+                    if (line.type === 'comment') { out.push(`{comment: ${line.text}}`); continue; }
 
-                        const lt = timing.lineTimings[ti];
-                        ti++;
-                        if (!lt || !lt.chordPositions.length) {
-                            out.push(line.lyric);
-                            continue;
-                        }
-                        // Same line, same line count as the source - each tag
-                        // sits immediately before the chord bracket it belongs
-                        // to: {cpl_m: 0.5}[G] lyrics lyrics ...
-                        //
-                        // Two adjacent chords with nothing but whitespace
-                        // between them (e.g. a trailing instrumental tag
-                        // "...ties [D] [G] [D] [G]") get padded out to a
-                        // fixed width instead of keeping their real
-                        // (typically single-space, cramped-looking) gap -
-                        // the grid/tick display is driven by literal
-                        // character position, so this is what actually
-                        // gives them visual breathing room. Gaps with real
-                        // word text are left untouched.
-                        let rebuilt = '';
-                        let cursor = 0;
-                        lt.chordPositions.forEach((cp, j) => {
-                            const gap = line.lyric.slice(cursor, cp.charIndex);
-                            rebuilt += (j > 0 && gap.trim() === '') ? ORPHAN_CHORD_PAD : gap;
-                            rebuilt += `{cpl_m: ${formatMeasureTag(cp.measureDuration)}}[${cp.chord}]`;
-                            cursor = cp.charIndex;
-                        });
-                        rebuilt += line.lyric.slice(cursor);
-                        out.push(rebuilt);
+                    const lt = timing.lineTimings[ti];
+                    ti++;
+                    if (!lt || !lt.chordPositions.length) {
+                        out.push(line.lyric);
+                        continue;
                     }
+                    // Same line, same line count as the source - each tag
+                    // sits immediately before the chord bracket it belongs
+                    // to: {x_cpl_m: 0.5}[G] lyrics lyrics ...
+                    //
+                    // Two adjacent chords with nothing but whitespace
+                    // between them (e.g. a trailing instrumental tag
+                    // "...ties [D] [G] [D] [G]") get padded out to a
+                    // fixed width instead of keeping their real
+                    // (typically single-space, cramped-looking) gap -
+                    // the grid/tick display is driven by literal
+                    // character position, so this is what actually
+                    // gives them visual breathing room. Gaps with real
+                    // word text are left untouched.
+                    let rebuilt = '';
+                    let cursor = 0;
+                    lt.chordPositions.forEach((cp, j) => {
+                        const gap = line.lyric.slice(cursor, cp.charIndex);
+                        rebuilt += (j > 0 && gap.trim() === '') ? ORPHAN_CHORD_PAD : gap;
+                        rebuilt += `{x_cpl_m: ${formatMeasureTag(cp.measureDuration)}}[${cp.chord}]`;
+                        cursor = cp.charIndex;
+                    });
+                    rebuilt += line.lyric.slice(cursor);
+                    out.push(rebuilt);
                 }
 
                 if (section.type === 'chorus') out.push('{end_of_chorus}');
@@ -1639,7 +1924,134 @@
             return name.replace(/min/i, 'm').replace(/-$/, 'm').replace(/Maj/i, 'maj');
         }
 
-        const chordNameIndex = buildChordNameIndex();
+        let chordNameIndex = buildChordNameIndex();
+
+        // Every voicing for every chord name (buildChordNameIndex only
+        // keeps one, the canonical pick) - used by the legend to let the
+        // user click a diagram and cycle through alternate fingerings.
+        // Each name's own list is sorted easiest-first (ties broken by the
+        // primary flag) so the default diagram shown - and the first stop
+        // when cycling forward - is always the easiest fingering, and
+        // cycling only gets harder from there.
+        const DIFFICULTY_RANK = { easy: 0, medium: 1, hard: 2 };
+
+        function buildChordNameVoicingsIndex() {
+            const index = {};
+            for (const key in chordData.standard) {
+                for (const voicing of chordData.standard[key]) {
+                    const name = voicing[0].replace(/\*$/, '');
+                    (index[name] || (index[name] = [])).push(voicing);
+                }
+            }
+            for (const name in index) {
+                index[name].sort((a, b) => {
+                    const diff = DIFFICULTY_RANK[a[14]] - DIFFICULTY_RANK[b[14]];
+                    if (diff !== 0) return diff;
+                    return (a[13] ? 0 : 1) - (b[13] ? 0 : 1);
+                });
+            }
+            return index;
+        }
+
+        let chordNameVoicingsIndex = buildChordNameVoicingsIndex();
+
+        // --- Custom {define:} chords -> session-only chordData extension ---
+        //
+        // transposeNoteName/SHARP_NOTES/FLAT_NOTES/NOTE_TO_INDEX (defined
+        // below, with the rest of transpose) double as the note-spelling
+        // primitives here too - both features need the same "shift/spell a
+        // note by semitone index" arithmetic.
+        //
+        // Standard-tuning open-string pitch classes, low E to high e, as
+        // indices into the C=0 chromatic scale (matching NOTE_TO_INDEX).
+        const OPEN_STRING_PITCH = [4, 9, 2, 7, 11, 4];
+        const INTERVAL_LABELS_FROM_ROOT = ['1', 'b2', '2', 'b3', '3', '4', 'b5', '5', 'b6', '6', 'b7', '7'];
+
+        // Builds a chordData-schema voicing (see DATA_SCHEMA.md) out of a
+        // parsed {define:} tag. Per the ChordPro spec, each "frets" value
+        // is 'x' (muted), 0 (open, regardless of base-fret), or a position
+        // relative to base-fret - absolute fret = base-fret + value - 1.
+        // notes/intervals are derived generically from the fret math (not
+        // hand-curated like the built-in database), so extensions beyond
+        // one octave read as their plain-degree equivalent (e.g. a 9th
+        // shows as "2") - a reasonable approximation for a chord the app
+        // has no other data about.
+        function buildVoicingFromDefine(def) {
+            const rootMatch = def.name.match(/^([A-G])([#b]?)/);
+            if (!rootMatch) return null;
+            const root = rootMatch[1] + rootMatch[2];
+            const rootIdx = NOTE_TO_INDEX[root];
+            if (rootIdx == null) return null;
+
+            const frets = def.frets.map((t) => {
+                if (/^x$/i.test(t) || t === '-1') return 'x';
+                const v = parseInt(t, 10);
+                return v === 0 ? 0 : def.baseFret + v - 1;
+            });
+
+            const scale = root.includes('b') ? FLAT_NOTES : SHARP_NOTES;
+            const collected = [];
+            const seenPitch = new Set();
+            for (let i = 0; i < 6; i++) {
+                const f = frets[i];
+                if (f === 'x') continue;
+                const pitchIdx = ((OPEN_STRING_PITCH[i] + f) % 12 + 12) % 12;
+                if (seenPitch.has(pitchIdx)) continue;
+                seenPitch.add(pitchIdx);
+                const semis = ((pitchIdx - rootIdx) % 12 + 12) % 12;
+                collected.push({ pitchIdx, semis });
+            }
+            collected.sort((a, b) => a.semis - b.semis);
+            const notes = collected.map((c) => scale[c.pitchIdx]);
+            const intervals = collected.map((c) => INTERVAL_LABELS_FROM_ROOT[c.semis]);
+
+            const hasB3 = intervals.includes('b3');
+            const has3 = intervals.includes('3');
+            const quality = hasB3 && !has3 ? 'minor' : (has3 ? 'major' : 'neutral');
+
+            return [
+                def.name, frets, notes, intervals,
+                'custom voicing (from {define:} tag)',
+                root, 'custom', [], null, 'Custom (from file)',
+                false, null, quality, true, 'medium',
+            ];
+        }
+
+        // Applies every {define:} tag collected on a parsed song to
+        // chordData, in memory, for the rest of this browser session. A
+        // name chordData already has an entry for is left alone entirely
+        // ("that's fine, it already has a diagram") - only genuinely
+        // unknown names get added, as a new "_custom" voicing bucket, and
+        // only once each (re-loading the same file, or a second song using
+        // the same custom chord, won't pile up duplicates). The lookup
+        // indexes are rebuilt only if something actually changed.
+        function applyCustomChordDefinitions(song) {
+            if (!song || !song.customDefines || !song.customDefines.length) return;
+            if (!chordData.standard._custom) chordData.standard._custom = [];
+            let added = false;
+            for (const def of song.customDefines) {
+                if (chordNameIndex[def.name] || chordNameIndex[normalizeChordName(def.name)]) continue;
+                const voicing = buildVoicingFromDefine(def);
+                if (!voicing) continue;
+                const dup = chordData.standard._custom.some(
+                    (v) => v[0] === voicing[0] && v[1].join(',') === voicing[1].join(',')
+                );
+                if (dup) continue;
+                chordData.standard._custom.push(voicing);
+                added = true;
+            }
+            if (added) {
+                chordNameIndex = buildChordNameIndex();
+                chordNameVoicingsIndex = buildChordNameVoicingsIndex();
+            }
+        }
+
+        // Which alternate voicing (index into chordNameVoicingsIndex[name])
+        // the legend is currently showing for a given chord name - persists
+        // across re-renders (e.g. toggling "Note Names") within the same
+        // loaded song, but isn't meaningful across songs so nothing resets
+        // it explicitly; a name that never appears again just goes unused.
+        let legendVoicingIndex = {};
 
         // --- Rendering ---
 
@@ -1672,33 +2084,123 @@
         // text below it, same as the lyric-anchored grid.
         const QUARTER_TICK_SPACING_CH = 5.5;
 
-        function buildEvenGridHTML(lt) {
+        // --- Line wrapping ---
+        //
+        // Chords/ticks are positioned by literal monospace character offset
+        // (ch units - see the .sheet-grid family of CSS rules and
+        // white-space:pre throughout), so a too-long line can't just get
+        // ordinary CSS text-wrap: each wrapped visual row needs its chord/
+        // tick positions recomputed relative to where THAT row starts, not
+        // the logical line's absolute start. maxChars is null/0 to mean
+        // "no wrapping" (falls back to the old single-row behavior exactly).
+        //
+        // Despite the wrapping, every chord-label span still carries the
+        // SAME data-line-idx/data-chord-idx it always would have - "the
+        // nth chord, in position order, on logical line N" - regardless of
+        // which physical row it ends up rendered into, so every click/
+        // drag/playback-highlight consumer that addresses chords that way
+        // (they all do; none independently recompute a ch position) keeps
+        // working unmodified.
+
+        // Splits `text` into ranges no longer than maxChars, breaking at a
+        // space when one is available in range (never mid-word unless a
+        // single word alone exceeds the budget, which hard-breaks it).
+        function wrapTextRanges(text, maxChars) {
+            const len = text.length;
+            if (!maxChars || maxChars <= 0 || len <= maxChars) {
+                return [{ start: 0, end: len }];
+            }
+            const ranges = [];
+            let start = 0;
+            while (start < len) {
+                let end = Math.min(start + maxChars, len);
+                if (end < len) {
+                    let breakAt = -1;
+                    for (let i = end; i > start; i--) {
+                        if (text[i - 1] === ' ') { breakAt = i - 1; break; }
+                    }
+                    if (breakAt > start) end = breakAt;
+                }
+                ranges.push({ start, end });
+                start = end;
+                while (start < len && text[start] === ' ') start++;
+            }
+            return ranges;
+        }
+
+        function segmentIndexForChar(ranges, charIndex) {
+            for (let i = 0; i < ranges.length; i++) {
+                if (charIndex <= ranges[i].end || i === ranges.length - 1) return i;
+            }
+            return ranges.length - 1;
+        }
+
+        // Buckets `items` (chords or ticks) into whichever wrapped range
+        // each one's character position falls into, converting its
+        // position to be local to that range's own start.
+        function bucketByRange(items, ranges, getPos) {
+            const buckets = ranges.map(() => []);
+            items.forEach((item, origIdx) => {
+                const pos = getPos(item);
+                const segIdx = segmentIndexForChar(ranges, pos);
+                const localPos = Math.max(0, pos - ranges[segIdx].start);
+                buckets[segIdx].push({ item, origIdx, localPos });
+            });
+            return buckets;
+        }
+
+        function buildEvenGridHTML(lt, lineIdx, maxChars) {
             const measuresSpanned = lt.measureEnd - lt.measureStart;
             const totalQuarters = Math.round(measuresSpanned * 4);
-            const gridWidth = totalQuarters * QUARTER_TICK_SPACING_CH;
-            let html = `<div class="sheet-grid" style="width:${gridWidth}ch">`;
 
-            html += '<div class="sheet-ticks">';
-            for (let q = 0; q <= totalQuarters; q++) {
-                const frac = q / totalQuarters;
-                // Lines no longer always start on a whole measure, so a tick
-                // is a true measure boundary only if its own absolute
-                // position is a whole number - not just its index in the line.
-                const absolutePosition = lt.measureStart + q / 4;
-                const isMeasure = Math.abs(absolutePosition - Math.round(absolutePosition)) < 1e-6;
-                html += `<span class="tick ${isMeasure ? 'tick-measure' : 'tick-quarter'}" style="left:${(frac * 100).toFixed(3)}%"></span>`;
+            // Chords here are evenly spaced by time, not anchored to any
+            // lyric text, so wrapping just buckets a fixed quarter-count
+            // per physical row instead of a word-boundary split.
+            const quartersPerRow = maxChars && maxChars > 0
+                ? Math.max(1, Math.floor(maxChars / QUARTER_TICK_SPACING_CH))
+                : totalQuarters;
+
+            let out = '';
+            for (let rowStart = 0; rowStart < totalQuarters; rowStart += quartersPerRow) {
+                const rowEnd = Math.min(rowStart + quartersPerRow, totalQuarters);
+                const rowQuarters = rowEnd - rowStart;
+                const gridWidth = rowQuarters * QUARTER_TICK_SPACING_CH;
+
+                let html = `<div class="sheet-line" data-line-idx="${lineIdx}">`;
+                html += `<div class="sheet-grid" style="width:${gridWidth}ch">`;
+                let numbersHtml = '';
+                html += '<div class="sheet-ticks">';
+                for (let q = rowStart; q <= rowEnd; q++) {
+                    const frac = (q - rowStart) / rowQuarters;
+                    // Lines no longer always start on a whole measure, so a
+                    // tick is a true measure boundary only if its own
+                    // absolute position is a whole number - not just its
+                    // index in the row.
+                    const absolutePosition = lt.measureStart + q / 4;
+                    const isMeasure = Math.abs(absolutePosition - Math.round(absolutePosition)) < 1e-6;
+                    const leftPct = (frac * 100).toFixed(3);
+                    html += `<span class="tick ${isMeasure ? 'tick-measure' : 'tick-quarter'}" style="left:${leftPct}%"></span>`;
+                    if (isMeasure) {
+                        numbersHtml += `<span class="tick-measure-number" style="left:${leftPct}%">${Math.round(absolutePosition) + 1}</span>`;
+                    }
+                }
+                html += '</div>';
+                html += `<div class="sheet-measure-numbers">${numbersHtml}</div>`;
+
+                html += '<div class="sheet-chords-grid">';
+                lt.chordPositions.forEach((cp, chordIdx) => {
+                    const qPos = (cp.measurePosition - lt.measureStart) * 4;
+                    if (qPos < rowStart - 1e-6 || qPos > rowEnd + 1e-6) return;
+                    const frac = (qPos - rowStart) / rowQuarters;
+                    html += `<span class="chord-label" data-line-idx="${lineIdx}" data-chord-idx="${chordIdx}" style="left:${(frac * 100).toFixed(3)}%">${escapeHtml(cp.chord)}</span>`;
+                });
+                html += '</div>';
+                html += '</div>';
+                html += '<div class="sheet-lyric">&nbsp;</div>';
+                html += '</div>';
+                out += html;
             }
-            html += '</div>';
-
-            html += '<div class="sheet-chords-grid">';
-            lt.chordPositions.forEach((cp, chordIdx) => {
-                const frac = (cp.measurePosition - lt.measureStart) / measuresSpanned;
-                html += `<span class="chord-label" data-line-idx="${lt.lineIdx}" data-chord-idx="${chordIdx}" style="left:${(frac * 100).toFixed(3)}%">${escapeHtml(cp.chord)}</span>`;
-            });
-            html += '</div>';
-
-            html += '</div>';
-            return html;
+            return out || `<div class="sheet-line" data-line-idx="${lineIdx}"><div class="sheet-lyric">&nbsp;</div></div>`;
         }
 
         // For lines that DO have lyrics: chords are pinned to the exact
@@ -1715,7 +2217,7 @@
         // across two different lines.
         function computeGridTicks(timing) {
             const anchors = [];
-            // A {cpl_m:0} chord is a carry-over marker, not a new timed
+            // A {x_cpl_m:0} chord is a carry-over marker, not a new timed
             // event - excluded entirely from anchor/interpolation
             // computation, and its exact position is recorded here so ANY
             // tick that would still land there (including a cross-line
@@ -1738,16 +2240,20 @@
             anchors.sort((a, b) => a.measurePosition - b.measurePosition);
 
             const ticksByLine = new Map();
-            const addTick = (lineIdx, leftCh, isMeasure) => {
+            // measureNumber is 1-based (measurePosition itself is 0-based -
+            // the song's very first measure) and only meaningful when
+            // isMeasure is true; carried on every tick regardless since
+            // it's cheap and callers only read it for measure ticks.
+            const addTick = (lineIdx, leftCh, isMeasure, measureNumber) => {
                 const suppressed = suppressedByLine.get(lineIdx);
                 if (suppressed && suppressed.some((s) => Math.abs(s - leftCh) < 1e-6)) return;
                 if (!ticksByLine.has(lineIdx)) ticksByLine.set(lineIdx, []);
-                ticksByLine.get(lineIdx).push({ leftCh, isMeasure });
+                ticksByLine.get(lineIdx).push({ leftCh, isMeasure, measureNumber });
             };
 
             anchors.forEach((a) => {
                 const isMeasure = Math.abs(a.measurePosition - Math.round(a.measurePosition)) < 1e-6;
-                addTick(a.lineIdx, a.charIndex, isMeasure);
+                addTick(a.lineIdx, a.charIndex, isMeasure, Math.round(a.measurePosition) + 1);
             });
 
             for (let i = 0; i < anchors.length - 1; i++) {
@@ -1761,10 +2267,27 @@
                     const q = step / 4;
                     const isMeasure = step % 4 === 0;
                     if (prev.lineIdx === next.lineIdx) {
+                        // This tick's horizontal position is only a linear
+                        // guess - proportional distance between two real
+                        // chords' character positions, standing in for a
+                        // sub-beat this song has no actual timing data for
+                        // (no chord change happens here at all). Labeling a
+                        // guessed position with a definite-looking measure
+                        // number reads as flatly wrong when the guess lands
+                        // somewhere that doesn't correspond to any natural
+                        // reading rhythm - so the tick mark itself still
+                        // shows (still a useful rough rhythm reference), but
+                        // no number.
                         const frac = (q - prev.measurePosition) / span;
-                        addTick(prev.lineIdx, prev.charIndex + frac * (next.charIndex - prev.charIndex), isMeasure);
+                        addTick(prev.lineIdx, prev.charIndex + frac * (next.charIndex - prev.charIndex), isMeasure, null);
                     } else {
-                        addTick(next.lineIdx, 0, isMeasure);
+                        // A tick "carried" to the very start of the next
+                        // line, because the gap between chords spans a line
+                        // break, IS worth labeling - "this line begins in
+                        // measure N" is exactly the standard sheet-music
+                        // convention of printing a measure number at the
+                        // start of every system, not a guessed position.
+                        addTick(next.lineIdx, 0, isMeasure, Math.round(q) + 1);
                     }
                 }
             }
@@ -1772,27 +2295,105 @@
             return ticksByLine;
         }
 
-        function buildLyricAnchoredGridHTML(line, chordPositions, ticks, lineIdx) {
-            const width = Math.max(line.lyric.length, 1);
-            let html = `<div class="sheet-grid" style="width:${width}ch">`;
+        function buildLyricAnchoredGridHTML(line, chordPositions, ticks, lineIdx, maxChars) {
+            const ranges = wrapTextRanges(line.lyric, maxChars);
+            const chordBuckets = bucketByRange(chordPositions, ranges, (cp) => cp.charIndex);
+            const tickBuckets = bucketByRange(ticks, ranges, (t) => t.leftCh);
 
-            html += '<div class="sheet-ticks">';
-            for (const t of ticks) {
-                html += `<span class="tick ${t.isMeasure ? 'tick-measure' : 'tick-quarter'}" style="left:${t.leftCh.toFixed(2)}ch"></span>`;
-            }
-            html += '</div>';
+            let out = '';
+            ranges.forEach((range, segIdx) => {
+                const segLyric = line.lyric.slice(range.start, range.end);
+                const width = Math.max(segLyric.length, 1);
 
-            html += '<div class="sheet-chords-grid">';
-            chordPositions.forEach((cp, chordIdx) => {
-                html += `<span class="chord-label" data-line-idx="${lineIdx}" data-chord-idx="${chordIdx}" style="left:${cp.charIndex}ch">${escapeHtml(cp.chord)}</span>`;
+                let html = `<div class="sheet-line" data-line-idx="${lineIdx}">`;
+                html += `<div class="sheet-grid" style="width:${width}ch">`;
+
+                html += '<div class="sheet-ticks">';
+                for (const { item: t, localPos } of tickBuckets[segIdx]) {
+                    html += `<span class="tick ${t.isMeasure ? 'tick-measure' : 'tick-quarter'}" style="left:${localPos.toFixed(2)}ch"></span>`;
+                }
+                html += '</div>';
+
+                // computeGridTicks "carries" every intermediate measure
+                // boundary that falls in a gap crossing a line break to the
+                // very start (position 0) of the next line, since there's
+                // no real anchor to interpolate a distinct position from -
+                // several different measure numbers can pile up at that
+                // same spot. Only the most advanced (last) one per unique
+                // position is worth a label; showing all of them stacked on
+                // top of each other just reads as scattered/misaligned.
+                const numberByPos = new Map();
+                for (const { item: t, localPos } of tickBuckets[segIdx]) {
+                    if (t.isMeasure && t.measureNumber != null) numberByPos.set(Math.round(localPos * 100), t.measureNumber);
+                }
+                let numbersHtml = '';
+                for (const [posKey, num] of numberByPos) {
+                    numbersHtml += `<span class="tick-measure-number" style="left:${(posKey / 100).toFixed(2)}ch">${num}</span>`;
+                }
+                html += `<div class="sheet-measure-numbers">${numbersHtml}</div>`;
+
+                html += '<div class="sheet-chords-grid">';
+                for (const { item: cp, origIdx, localPos } of chordBuckets[segIdx]) {
+                    html += `<span class="chord-label" data-line-idx="${lineIdx}" data-chord-idx="${origIdx}" style="left:${localPos}ch">${escapeHtml(cp.chord)}</span>`;
+                }
+                html += '</div>';
+
+                html += '</div>';
+                html += `<div class="sheet-lyric">${segLyric ? escapeHtml(segLyric) : '&nbsp;'}</div>`;
+                html += '</div>';
+                out += html;
             });
-            html += '</div>';
-
-            html += '</div>';
-            return html;
+            return out;
         }
 
-        function buildSongHTML(song, timing, markTime) {
+        // Classic (non-mark-time) annotation, wrapped: the chord-text row
+        // and lyric row are two independent monospace strings sharing the
+        // same character columns, so they must be sliced at the SAME
+        // wrap boundaries (word boundaries in the lyric) to stay in sync -
+        // ordinary per-element CSS wrap would let them drift apart. A
+        // trailing instrumental chord run past the end of the lyric text
+        // is included by padding the lyric out to the chord line's length
+        // before computing wrap points.
+        function buildClassicLineHTML(line, lineIdx, maxChars) {
+            const chordLine = buildChordLine(line.chords) || '';
+            const textLen = Math.max(line.lyric.length, chordLine.length);
+            const paddedLyric = line.lyric.length < textLen
+                ? line.lyric + ' '.repeat(textLen - line.lyric.length)
+                : line.lyric;
+            const ranges = wrapTextRanges(paddedLyric, maxChars);
+
+            let out = '';
+            ranges.forEach((range) => {
+                const segLyric = line.lyric.slice(range.start, Math.min(range.end, line.lyric.length));
+                const segChords = chordLine.slice(range.start, range.end).replace(/\s+$/, '');
+                let html = `<div class="sheet-line" data-line-idx="${lineIdx}">`;
+                if (segChords) html += `<div class="sheet-chords">${escapeHtml(segChords)}</div>`;
+                html += `<div class="sheet-lyric">${segLyric ? escapeHtml(segLyric) : '&nbsp;'}</div>`;
+                html += '</div>';
+                out += html;
+            });
+            return out;
+        }
+
+        // Index (in the same lineIdx sequence buildSongHTML/timing.lineTimings
+        // use - i.e. counting only 'line'-type entries, across all non-tab
+        // sections) of the first line that actually has a chord tag on it.
+        // Returns -1 if the song has no chords anywhere, in which case
+        // nothing counts as "before the first chord" and everything renders
+        // as normal.
+        function findFirstChordedLineIndex(song) {
+            let idx = 0;
+            for (const section of song.sections) {
+                for (const line of section.lines) {
+                    if (line.type !== 'line') continue;
+                    if (line.chords.length > 0) return idx;
+                    idx++;
+                }
+            }
+            return -1;
+        }
+
+        function buildSongHTML(song, timing, markTime, maxChars) {
             let html = '<div class="sheet-header">';
             if (song.title) html += `<div class="sheet-title">${escapeHtml(song.title)}</div>`;
             if (song.subtitle) html += `<div class="sheet-subtitle">${escapeHtml(song.subtitle)}</div>`;
@@ -1806,21 +2407,44 @@
             let firstChordedLineSeen = false;
             let lineIdx = 0;
             const gridTicksByLine = markTime ? computeGridTicks(timing) : null;
+            // Any plain text/blank line before this point has no chord tag
+            // of its own and precedes the song's first one - typically
+            // leftover boilerplate from a pasted tab-site dump, not real
+            // song content - so it's skipped entirely in this rendered
+            // output (the underlying text buffers are untouched; this is
+            // view-only). Directive-bearing lines (comments, section
+            // labels) are left alone regardless of position, since they
+            // ARE chordpro/chordplayer tags, just not chord ones.
+            const firstChordedLineIdx = findFirstChordedLineIndex(song);
 
             for (const section of song.sections) {
                 html += `<div class="sheet-section sheet-section-${section.type}">`;
                 if (section.label) html += `<div class="sheet-section-label">${escapeHtml(section.label)}</div>`;
 
-                if (section.type === 'tab') {
-                    const tabText = section.lines
-                        .filter(l => l.type === 'tabline')
-                        .map(l => escapeHtml(l.text))
-                        .join('\n');
-                    html += `<pre class="sheet-tab">${tabText}</pre>`;
-                } else {
+                {
+                    // Consecutive 'tabline' entries (real ASCII notation -
+                    // see parseChordPro) are grouped into one <pre> block so
+                    // their columns stay visually aligned as a group, same
+                    // as before this function handled 'line' entries mixed
+                    // into a tab section too; flushed whenever a non-tabline
+                    // entry interrupts the run, or at the section's end.
+                    let tabBuffer = [];
+                    const flushTabBuffer = () => {
+                        if (!tabBuffer.length) return;
+                        html += `<pre class="sheet-tab">${tabBuffer.join('\n')}</pre>`;
+                        tabBuffer = [];
+                    };
+
                     let lastWasBlank = false;
                     for (const line of section.lines) {
+                        if (line.type === 'tabline') {
+                            tabBuffer.push(escapeHtml(line.text));
+                            continue;
+                        }
+                        flushTabBuffer();
+
                         if (line.type === 'blank') {
+                            if (firstChordedLineIdx >= 0 && lineIdx < firstChordedLineIdx) continue;
                             if (!lastWasBlank) html += '<div class="sheet-spacer"></div>';
                             lastWasBlank = true;
                             continue;
@@ -1829,6 +2453,11 @@
 
                         if (line.type === 'comment') {
                             html += `<div class="sheet-comment">${escapeHtml(line.text)}</div>`;
+                            continue;
+                        }
+
+                        if (firstChordedLineIdx >= 0 && lineIdx < firstChordedLineIdx) {
+                            lineIdx++;
                             continue;
                         }
 
@@ -1842,22 +2471,27 @@
                             firstChordedLineSeen = true;
                         }
 
-                        html += `<div class="sheet-line" data-line-idx="${lineIdx}">`;
                         if (hasChords) {
                             if (markTime) {
                                 if (lt.hasLyric) {
-                                    html += buildLyricAnchoredGridHTML(line, lt.chordPositions, gridTicksByLine.get(lineIdx) || [], lineIdx);
+                                    html += buildLyricAnchoredGridHTML(line, lt.chordPositions, gridTicksByLine.get(lineIdx) || [], lineIdx, maxChars);
                                 } else {
-                                    html += buildEvenGridHTML(lt);
+                                    html += buildEvenGridHTML(lt, lineIdx, maxChars);
                                 }
                             } else {
-                                html += `<div class="sheet-chords">${escapeHtml(buildChordLine(line.chords))}</div>`;
+                                html += buildClassicLineHTML(line, lineIdx, maxChars);
                             }
+                        } else {
+                            // No chords at all on this line - no character-
+                            // position alignment to preserve, so ordinary
+                            // CSS wrapping (see .sheet-lyric-wrap) handles
+                            // it directly instead of going through the
+                            // character-budget wrap math above.
+                            html += `<div class="sheet-line" data-line-idx="${lineIdx}"><div class="sheet-lyric sheet-lyric-wrap">${line.lyric ? escapeHtml(line.lyric) : '&nbsp;'}</div></div>`;
                         }
-                        html += `<div class="sheet-lyric">${line.lyric ? escapeHtml(line.lyric) : '&nbsp;'}</div>`;
-                        html += '</div>';
                         lineIdx++;
                     }
+                    flushTabBuffer();
                 }
                 html += '</div>';
             }
@@ -1868,13 +2502,22 @@
             if (!chordNames.length) {
                 return '<div class="legend-missing">No chords found.</div>';
             }
+            // Chords with no diagram sink to the bottom - everything else
+            // keeps its incoming (alphabetical) order, so this only ever
+            // reorders across that one boundary, never within either group.
+            const hasDiagram = (name) => !!(chordNameVoicingsIndex[name] || chordNameVoicingsIndex[normalizeChordName(name)]);
+            const orderedNames = [...chordNames].sort((a, b) => (hasDiagram(a) ? 0 : 1) - (hasDiagram(b) ? 0 : 1));
+
             const gridClass = chordNames.length <= 7 ? 'legend-grid-1' : 'legend-grid-2';
             let html = `<div class="legend-grid ${gridClass}">`;
-            for (const name of chordNames) {
-                const voicing = chordNameIndex[name] || chordNameIndex[normalizeChordName(name)];
-                html += '<div class="legend-cell">';
+            for (const name of orderedNames) {
+                const voicings = chordNameVoicingsIndex[name] || chordNameVoicingsIndex[normalizeChordName(name)];
+                const cyclable = voicings && voicings.length > 1;
+                const voicingIdx = cyclable ? ((legendVoicingIndex[name] || 0) % voicings.length) : 0;
+                const voicing = voicings ? voicings[voicingIdx] : null;
+                html += `<div class="legend-cell${cyclable ? ' legend-cell-cyclable' : ''}" data-chord-name="${escapeHtml(name)}">`;
                 if (voicing) {
-                    const svg = drawChordDiagram(voicing, 'standard', opts.showNoteNames, false);
+                    const svg = drawChordDiagram(voicing, 'standard', opts.showNoteNames, false, opts.monochrome);
                     // drawChordDiagram draws a sub-label (position/shape, e.g.
                     // "Open" or "A-shape barre") under the chord name - not wanted
                     // on the songsheet legend, so strip just that text node out.
@@ -1902,6 +2545,9 @@
                         svg.setAttribute('viewBox', vb.join(' '));
                     }
                     html += `<div class="legend-diagram">${svg.outerHTML}</div>`;
+                    if (cyclable) {
+                        html += `<div class="legend-voicing-badge">${voicingIdx + 1}/${voicings.length}</div>`;
+                    }
                     if (opts.showIntervals) {
                         html += `<div class="legend-intervals">${voicing[2].join(' ')}</div>`;
                     }
@@ -1953,7 +2599,6 @@
             return {
                 ...song,
                 sections: song.sections.map(section => {
-                    if (section.type === 'tab') return section;
                     return {
                         ...section,
                         lines: section.lines.map(line => {
@@ -1975,7 +2620,6 @@
             const seen = new Set();
             const names = [];
             for (const section of song.sections) {
-                if (section.type === 'tab') continue;
                 for (const line of section.lines) {
                     if (line.type !== 'line') continue;
                     for (const c of line.chords) {
@@ -1993,19 +2637,46 @@
             return names;
         }
 
+        // Whether the Color/B&W segmented control (next to Print diagrams)
+        // is set to B&W.
+        function isPrintBw() {
+            return document.getElementById('printColorBw').checked;
+        }
+
+        // The on-screen legend is always in color; the print legend only
+        // gets a separately-rendered monochrome version when "B&W" is
+        // selected - otherwise it reuses the same color HTML, same as
+        // before this option existed.
         function renderLegend() {
-            const opts = {
+            const baseOpts = {
                 showNoteNames: document.getElementById('legendShowNotes').checked,
                 showIntervals: document.getElementById('legendShowIntervals').checked,
             };
-            const html = buildLegendHTML(currentChordNames, opts);
-            document.getElementById('legendPane').innerHTML = html;
-            document.getElementById('printLegend').innerHTML = html;
+            const colorHtml = buildLegendHTML(currentChordNames, { ...baseOpts, monochrome: false });
+            document.getElementById('legendPane').innerHTML = colorHtml;
+
+            document.getElementById('printLegend').innerHTML = isPrintBw()
+                ? buildLegendHTML(currentChordNames, { ...baseOpts, monochrome: true })
+                : colorHtml;
 
             const narrow = currentChordNames.length <= 7;
             document.querySelector('.print-legend-fixed').classList.toggle('legend-narrow', narrow);
             document.querySelector('.print-body-content').classList.toggle('legend-narrow', narrow);
         }
+
+        // Clicking a legend diagram that has more than one voicing cycles
+        // to the next one, wrapping back to the first after the last -
+        // just advances legendVoicingIndex and re-renders, same as any
+        // other legend-affecting toggle.
+        document.getElementById('legendPane').addEventListener('click', (e) => {
+            const cell = e.target.closest('.legend-cell-cyclable');
+            if (!cell) return;
+            const name = cell.dataset.chordName;
+            const voicings = chordNameVoicingsIndex[name] || chordNameVoicingsIndex[normalizeChordName(name)];
+            if (!voicings || voicings.length < 2) return;
+            legendVoicingIndex[name] = ((legendVoicingIndex[name] || 0) + 1) % voicings.length;
+            renderLegend();
+        });
 
         let currentLineTimings = [];
         let currentChordScheduleFull = [];
@@ -2013,7 +2684,8 @@
         // --- Source / tagged-memory state ---
         //
         // Two buffers live in memory once a song is loaded: `chordProText`
-        // (what was pasted/dropped/chosen - never edited in place) and
+        // (what was pasted/dropped/chosen - never edited in place, except by
+        // transposeSong, which rewrites chord names in both buffers) and
         // `chordPlayerText` (a working copy seeded from it via
         // buildTaggedChordPro, editable when "With Time Tags" is selected).
         // The single #rawPane box always displays whichever buffer the
@@ -2056,15 +2728,95 @@
         let proFileHandle = null;
         let cplFileHandle = null;
 
-        // Scroll speed and chord playback are always driven by
-        // chordPlayerText's own timing, never the active pane's - raw
-        // source has no explicit {cpl_m:} tags (or edits) of its own, so
-        // it's not a meaningful timing source. This is independent of what's
-        // currently displayed/rendered in the sheet.
+        // Scroll speed (and chord playback, while it's available - see
+        // syncPaneDisplay, which force-disables "Play chords" outside
+        // ChordPlayer view) are driven by chordPlayerText's own real
+        // {x_cpl_m:} durations while viewing "ChordPlayer". While viewing
+        // plain "Chordpro" instead, there are no duration tags to read at
+        // all - so rather than following chordPlayerText's real (possibly
+        // very different) durations for a buffer the reader isn't even
+        // looking at, every chord in chordProText is flatly assumed to be
+        // exactly one measure, tempo-locked and fully predictable, which is
+        // what "just follow the tempo, one chord per measure" scrolling
+        // means for a plain, untagged chart.
         function computeTaggedTiming() {
+            const viewingChordPro = !document.getElementById('sourceViewTagged').checked;
+            if (viewingChordPro) {
+                if (!chordProText || !chordProText.trim()) return { lineTimings: [], chordSchedule: [] };
+                return computeMeasureTiming(parseChordPro(chordProText), 1);
+            }
             if (!chordPlayerText || !chordPlayerText.trim()) return { lineTimings: [], chordSchedule: [] };
             const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
             return computeMeasureTiming(parseChordPro(chordPlayerText), chordDurationMeasures);
+        }
+
+        const MONO_FONT_FAMILY = "'Nimbus Mono PS', 'Courier New', Courier, monospace";
+
+        // Measures actual rendered monospace character width via a hidden
+        // probe, rather than guessing a px-per-pt ratio - the wrap budget
+        // needs to be right, not approximately right, or it just moves the
+        // overflow instead of fixing it.
+        function measureMonospaceCharWidthPx(fontSizeCss) {
+            const probe = document.createElement('span');
+            probe.style.position = 'absolute';
+            probe.style.visibility = 'hidden';
+            probe.style.whiteSpace = 'pre';
+            probe.style.fontFamily = MONO_FONT_FAMILY;
+            probe.style.fontSize = fontSizeCss;
+            probe.style.fontWeight = '700';
+            probe.textContent = 'M'.repeat(60);
+            document.body.appendChild(probe);
+            const width = probe.getBoundingClientRect().width / 60;
+            document.body.removeChild(probe);
+            return width || 8;
+        }
+
+        // Screen wrap budget - measured live from the actual #sheetPane box
+        // at render time. Per the "fixed width, not live-reflow" design:
+        // this is only recomputed on the next render (loading a song,
+        // toggling a setting, etc.), not continuously as the window
+        // resizes, so it can just read the pane's current width directly.
+        function getScreenWrapMaxChars() {
+            const pane = document.getElementById('sheetPane');
+            if (!pane) return null;
+            const rect = pane.getBoundingClientRect();
+            if (!rect.width) return null;
+            const styles = getComputedStyle(pane);
+            const paddingX = parseFloat(styles.paddingLeft || 0) + parseFloat(styles.paddingRight || 0);
+            const availablePx = Math.max(0, rect.width - paddingX);
+            const charWidth = measureMonospaceCharWidthPx('15px');
+            return Math.max(10, Math.floor(availablePx / charWidth));
+        }
+
+        // Print wrap budget - the print target (#printBody) is display:none
+        // until the browser's own print pass and isn't otherwise
+        // measurable, so its available width is approximated the same way
+        // the @page rule above already approximates print margins (see that
+        // rule's comment): US Letter at Chrome's ~0.4in default side
+        // margin. Adjust PRINT_SIDE_MARGIN_IN if your printed output still
+        // clips with a non-default margin.
+        const PRINT_PAGE_WIDTH_IN = 8.5;
+        const PRINT_SIDE_MARGIN_IN = 0.4;
+        const PRINT_CSS_DPI = 96;
+        // Extra left margin added (see printMarginOverride) when Song Sheet
+        // print excludes diagrams - must be subtracted here too, or this
+        // wrap budget overestimates available width and lines clip the
+        // right edge.
+        const PRINT_EXTRA_LEFT_MARGIN_IN = 0.75;
+
+        function getPrintWrapMaxChars() {
+            const showSheet = document.getElementById('viewModeSheet').checked;
+            const includeDiagrams = document.getElementById('printDiagramsCheck').checked;
+            const narrow = currentChordNames.length <= 7;
+            let legendMarginPx = 0;
+            if (showSheet && includeDiagrams && currentChordNames.length) {
+                legendMarginPx = narrow ? 160 : 283;
+            }
+            const extraMarginPx = (showSheet && !includeDiagrams) ? PRINT_EXTRA_LEFT_MARGIN_IN * PRINT_CSS_DPI : 0;
+            const pageContentPx = (PRINT_PAGE_WIDTH_IN - PRINT_SIDE_MARGIN_IN * 2) * PRINT_CSS_DPI;
+            const availablePx = Math.max(0, pageContentPx - legendMarginPx - extraMarginPx - 8);
+            const charWidth = measureMonospaceCharWidthPx('12pt');
+            return Math.max(10, Math.floor(availablePx / charWidth));
         }
 
         function renderOutput() {
@@ -2076,7 +2828,7 @@
             const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
             const timing = computeMeasureTiming(displaySong, chordDurationMeasures);
             const markTime = document.getElementById('sourceViewTagged').checked;
-            const songHTML = buildSongHTML(displaySong, timing, markTime);
+            const songHTML = buildSongHTML(displaySong, timing, markTime, getScreenWrapMaxChars());
             const scrollTiming = computeTaggedTiming();
             currentLineTimings = scrollTiming.lineTimings;
             currentChordScheduleFull = scrollTiming.chordSchedule;
@@ -2088,29 +2840,44 @@
             activeChordEl = null;
             updateResumeFlashDOM();
             renderLegend();
-            updatePrintOutput(songHTML);
+            updatePrintOutput(displaySong, timing, markTime);
         }
 
         // Print mirrors whichever view (Raw vs Songsheet) is currently on
         // screen, independent of what's shown live - Raw always prints a
         // plain monospace dump of the active buffer with no legend; Song
-        // Sheet prints the same formatted HTML shown on screen, with the
-        // chord-diagram legend included only if "Include chord diagrams in
-        // printout" is checked (the on-screen legend-pane always shows
-        // regardless - that checkbox only affects print).
-        function updatePrintOutput(songHTML) {
+        // Sheet prints the song re-rendered at the print page's own wrap
+        // budget (screen and print rarely share one - different font size,
+        // different available width), with the chord-diagram legend
+        // included only if "Include chord diagrams in printout" is checked
+        // (the on-screen legend-pane always shows regardless - that
+        // checkbox only affects print).
+        function updatePrintOutput(displaySong, timing, markTime) {
             const showSheet = document.getElementById('viewModeSheet').checked;
             const printSheet = document.querySelector('.print-sheet');
+            printSheet.classList.toggle('print-bw', isPrintBw());
+            let widenLeftMargin = false;
             if (showSheet) {
-                document.getElementById('printBody').innerHTML = songHTML;
+                const printHTML = buildSongHTML(displaySong, timing, markTime, getPrintWrapMaxChars());
+                document.getElementById('printBody').innerHTML = printHTML;
                 const includeDiagrams = document.getElementById('printDiagramsCheck').checked;
                 printSheet.classList.toggle('no-legend', !includeDiagrams);
+                widenLeftMargin = !includeDiagrams;
             } else {
                 const showTagged = document.getElementById('sourceViewTagged').checked;
                 const text = showTagged ? chordPlayerText : chordProText;
                 document.getElementById('printBody').innerHTML = `<pre class="print-raw-text">${escapeHtml(text)}</pre>`;
                 printSheet.classList.add('no-legend');
             }
+            // Song Sheet PDF only: with diagrams excluded there's no legend
+            // column eating the right side, so the left margin is widened
+            // to keep the text block from looking lopsided. @page margins
+            // are static CSS, not reachable via a class toggle, so this
+            // rewrites a dedicated <style> tag instead (see @page above for
+            // the .4in baseline this adds .75in on top of).
+            document.getElementById('printMarginOverride').textContent = widenLeftMargin
+                ? '@page { margin-left: 1.15in; }'
+                : '';
         }
 
         // Sizes #rawPane/#sheetPane (the shared .sheet-pane slot) to
@@ -2190,7 +2957,7 @@
         // source, using the current "Chord duration" dropdown as the base
         // duration for every chord - this is what actually makes that
         // control mean something once a song is loaded: with every chord in
-        // the tagged buffer already carrying its own explicit {cpl_m:D} tag
+        // the tagged buffer already carrying its own explicit {x_cpl_m:D} tag
         // (needed for the duration-only cascade to round-trip), there's no
         // "default" left for the dropdown to influence unless something
         // explicitly regenerates the buffer, which is what this does.
@@ -2225,6 +2992,8 @@
             if (tagsDirty && !confirm('You have unsaved edits in "With Time Tags" that will be lost. Load this new file anyway?')) {
                 return false;
             }
+            text = normalizeCapoDirective(text);
+            text = cleanImportedChordProText(text);
 
             sourceFileName = (meta && meta.fileName) || null;
             sourceIsCpl = /\.chordplayer$/i.test(sourceFileName || '');
@@ -2233,18 +3002,24 @@
             cplFileHandle = sourceIsCpl ? loadedHandle : null;
 
             currentSong = parseChordPro(text);
-            // Any loaded file's existing {cpl_m:} tags are exactly what the
-            // user intends - load verbatim into chordPlayerText, no
-            // re-parse/rebuild/retag, regardless of extension (a .pro can
-            // carry tags too, however rare). chordProText only strips them
-            // back out when the load is specifically a .chordplayer file -
-            // that's the one case where "the plain counterpart" is a
-            // meaningful, distinct thing to want; for any other extension
-            // that already has tags, there's no such distinction and both
-            // buffers stay identical, so a subsequent Save writes two
-            // identical files. Untagged text (any extension) falls through
-            // to auto-tagging, same as always.
-            if (/\{cpl_m:/i.test(text)) {
+            applyCustomChordDefinitions(currentSong);
+            // Any loaded file's existing {x_cpl_m:} tags (or legacy
+            // pre-"x_"-prefix {cpl_m:}) are exactly what the user intends -
+            // load verbatim into chordPlayerText, no re-parse/rebuild/retag,
+            // regardless of extension (a .pro can carry tags too, however
+            // rare). chordProText only strips them back out when the load
+            // is specifically a .chordplayer file - that's the one case
+            // where "the plain counterpart" is a meaningful, distinct thing
+            // to want; for any other extension that already has tags,
+            // there's no such distinction and both buffers stay identical,
+            // so a subsequent Save writes two identical files. A file still
+            // using the legacy tag name loads and plays back fine as-is;
+            // it only migrates to the new name once something actually
+            // edits a chord (any edit re-serializes via buildTaggedChordPro,
+            // which always emits the current name), not merely on load/Save.
+            // Untagged text (any extension) falls through to auto-tagging,
+            // same as always.
+            if (/\{(?:x_)?cpl_m:/i.test(text)) {
                 chordPlayerText = text;
                 chordProText = sourceIsCpl ? stripCplTags(text) : text;
             } else {
@@ -2258,6 +3033,8 @@
             document.getElementById('playChordsToggle').checked = true;
             lastPlayChordsInSheetMode = true;
             resumePointChord = null;
+            transposeOffset = 0;
+            updateTransposeOffsetLabel();
             return true;
         }
 
@@ -2425,7 +3202,7 @@
         // Auto-fills the YouTube URL field for the just-loaded song -
         // editable afterward, and cleared out if the new song has neither
         // source (so a previous song's video doesn't linger against the
-        // wrong song). Prefers the song's own {cpl_v:} tag (see
+        // wrong song). Prefers the song's own {x_cpl_v:} tag (see
         // parseChordPro/buildPatchedSource) when present; falls back to
         // scanning the raw lyrics/comments for a bare YouTube link, for
         // songs saved before this tag existed.
@@ -2512,6 +3289,8 @@
             songFinished = false;
             songElapsedMeasures = 0;
             scrollStartMeasure = 0;
+            transposeOffset = 0;
+            updateTransposeOffsetLabel();
 
             document.getElementById('rawPane').value = '';
             document.getElementById('sheetPane').innerHTML = '';
@@ -2528,13 +3307,108 @@
             updateSheetPaneHeight();
             syncPaneDisplay();
             updateResumeFlashDOM();
+
+            try { localStorage.removeItem(SESSION_STORAGE_KEY); } catch (e) {}
         }
+
+        // --- Session persistence ---
+        //
+        // ChordPlayer and ChordTutor are separate pages (the nav bar does a
+        // real navigation, not an SPA route), so anything the user has
+        // loaded/tweaked would normally vanish the moment they click over
+        // to ChordTutor and back. To make that round trip transparent, the
+        // full in-memory state - both text buffers plus every durable
+        // control - is snapshotted to localStorage right before the page
+        // unloads, and replayed back on the next load. Purely a same-
+        // browser convenience, not a save/export feature - Save/save-as
+        // file handles are never persisted (they can't be serialized), and
+        // in-flight playback (scrolling/counting-in) is deliberately not
+        // resumed, only settings.
+        const SESSION_STORAGE_KEY = 'chordplayer.session.v1';
+        const PERSISTED_CONTROL_IDS = [
+            'timeSignatureSelect', 'chordDurationSelect', 'simplifyToggle',
+            'legendShowNotes', 'legendShowIntervals', 'playChordsToggle',
+            'bpmSlider', 'toneSelect', 'strumPatternSelect', 'accentContrastSlider',
+            'chordVolumeSlider', 'metronomeToggle', 'metronomeVolumeSlider',
+            'videoVolumeSlider', 'videoSpeedSelect', 'youtubeUrlInput',
+            'printColorColor', 'printColorBw',
+        ];
+
+        function saveSessionState() {
+            if (!sourceLoaded) return;
+            const controls = {};
+            for (const id of PERSISTED_CONTROL_IDS) {
+                const el = document.getElementById(id);
+                if (!el) continue;
+                controls[id] = (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value;
+            }
+            const state = {
+                chordProText, chordPlayerText, tagsDirty, sourceFileName, sourceIsCpl,
+                transposeOffset,
+                sourceViewTagged: document.getElementById('sourceViewTagged').checked,
+                viewModeSheet: document.getElementById('viewModeSheet').checked,
+                controls,
+            };
+            try { localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+        }
+
+        // Re-hydrates a snapshot saved by saveSessionState - restores the
+        // two text buffers and bookkeeping vars directly, then re-runs the
+        // normal finishLoad tail (same one loadNewSource uses) so rendering,
+        // the player bar, and the video embed all come up exactly as they
+        // would from a fresh load. Every other control is set and then
+        // re-dispatched as a real input/change event, so each control's own
+        // existing listener - not this function - does the work of
+        // resyncing whatever cached JS state (bpm, metronome, legend
+        // options, etc.) it owns.
+        function restoreSessionState() {
+            let saved;
+            try { saved = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || 'null'); } catch (e) { saved = null; }
+            if (!saved || !saved.chordProText) return;
+
+            chordProText = saved.chordProText;
+            chordPlayerText = saved.chordPlayerText || saved.chordProText;
+            currentSong = parseChordPro(chordPlayerText);
+            // chordPlayerText's own {define:} tags may have been dropped by
+            // a prior auto-tag pass (buildTaggedChordPro doesn't
+            // re-serialize them) - chordProText always keeps the originals,
+            // so re-derive the custom-chord set from that instead.
+            applyCustomChordDefinitions(parseChordPro(chordProText));
+            tagsDirty = !!saved.tagsDirty;
+            sourceFileName = saved.sourceFileName || null;
+            sourceIsCpl = !!saved.sourceIsCpl;
+            sourceLoaded = true;
+            transposeOffset = saved.transposeOffset || 0;
+
+            document.getElementById('sourceViewTagged').checked = saved.sourceViewTagged !== false;
+            document.getElementById('sourceViewSource').checked = saved.sourceViewTagged === false;
+            document.getElementById('viewModeSheet').checked = saved.viewModeSheet !== false;
+            document.getElementById('viewModeRaw').checked = saved.viewModeSheet === false;
+
+            finishLoad();
+
+            const controls = saved.controls || {};
+            for (const id of PERSISTED_CONTROL_IDS) {
+                if (!(id in controls)) continue;
+                const el = document.getElementById(id);
+                if (!el) continue;
+                if (el.type === 'checkbox' || el.type === 'radio') el.checked = controls[id];
+                else el.value = controls[id];
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            updateTransposeOffsetLabel();
+        }
+
+        window.addEventListener('pagehide', saveSessionState);
+        window.addEventListener('beforeunload', saveSessionState);
 
         // --- Save ---
         //
         // Patches {time:}/{tempo:} into a copy of a buffer without
         // re-parsing (re-parsing+rebuilding would discard any in-progress
-        // {cpl_m:} edits sitting in chordPlayerText) - replaces an
+        // {x_cpl_m:} edits sitting in chordPlayerText) - replaces an
         // existing directive line in place, or inserts a new one after the
         // file's leading block of header directives (title/artist/key/
         // etc.) if the file has none yet. {key:}/{capo:} are deliberately
@@ -2549,7 +3423,7 @@
                 lines[idx] = newLine;
                 return lines.join('\n');
             }
-            const headerRe = /^\{(title|t|subtitle|st|artist|key|capo|time|tempo|cpl_v)(?::.*)?\}$/i;
+            const headerRe = /^\{(title|t|subtitle|st|artist|key|capo|time|tempo|x_cpl_v|cpl_v)(?::.*)?\}$/i;
             let insertAt = 0;
             for (let i = 0; i < lines.length; i++) {
                 const trimmed = lines[i].trim();
@@ -2562,7 +3436,7 @@
 
         // Companion to upsertDirective, for a directive that should be
         // dropped entirely rather than written with an empty value - used
-        // when the YouTube URL field is cleared, so a stale {cpl_v:} tag
+        // when the YouTube URL field is cleared, so a stale {x_cpl_v:} tag
         // doesn't linger in the saved file pointing at a video that's no
         // longer set.
         function removeDirective(text, name) {
@@ -2577,21 +3451,25 @@
 
         // Used when the loaded "source" is itself a .chordplayer file
         // (sourceIsCpl): chordProText (the "Chordpro" pane's own buffer) is
-        // a literal strip of just the {cpl_m:} tags out of the verbatim
-        // loaded text - see loadNewSource. No parsing/rebuilding - the
-        // file's own tags are taken as exactly what the user intends, so
-        // nothing about the text is touched beyond removing the tags
-        // themselves.
+        // a literal strip of just the {x_cpl_m:} tags (or the legacy
+        // pre-"x_"-prefix {cpl_m:}) out of the verbatim loaded text - see
+        // loadNewSource. No parsing/rebuilding - the file's own tags are
+        // taken as exactly what the user intends, so nothing about the
+        // text is touched beyond removing the tags themselves.
         function stripCplTags(text) {
-            return text.replace(/\{cpl_m:\s*[^}]*\}/gi, '');
+            return text.replace(/\{(?:x_)?cpl_m:\s*[^}]*\}/gi, '');
         }
 
-        // Patches the current YouTube URL field into a copy of `text` as a
-        // {cpl_v:} directive (or strips any existing one if the field's
-        // empty) - shared tail of buildPatchedSource/buildPatchedTagged.
+        // Patches the current YouTube URL field into a copy of `text` as an
+        // {x_cpl_v:} directive (or strips any existing one, including a
+        // legacy pre-"x_"-prefix {cpl_v:}, if the field's empty) - shared
+        // tail of buildPatchedSource/buildPatchedTagged. Always removes any
+        // legacy-named tag first, so saving migrates it to the current name
+        // in place rather than leaving a stale duplicate behind.
         function patchVideoUrl(text) {
             const videoUrl = document.getElementById('youtubeUrlInput').value.trim();
-            return videoUrl ? upsertDirective(text, 'cpl_v', videoUrl) : removeDirective(text, 'cpl_v');
+            const migrated = removeDirective(text, 'cpl_v');
+            return videoUrl ? upsertDirective(migrated, 'x_cpl_v', videoUrl) : removeDirective(migrated, 'x_cpl_v');
         }
 
         function buildPatchedSource() {
@@ -2947,11 +3825,21 @@
             const map = currentMeasurePixelMap;
             if (!map.length) return 0;
             if (pixelY <= map[0].pixelTop) return map[0].measureStart;
-            for (const seg of map) {
+            for (let i = 0; i < map.length; i++) {
+                const seg = map[i];
                 if (pixelY >= seg.pixelTop && pixelY <= seg.pixelBottom) {
                     const span = seg.pixelBottom - seg.pixelTop;
                     const frac = span > 0 ? (pixelY - seg.pixelTop) / span : 0;
                     return seg.measureStart + frac * (seg.measureEnd - seg.measureStart);
+                }
+                // pixelY sits in the small gap between this line and the
+                // next one (see .sheet-line's own margin-bottom) - belongs
+                // to wherever this line left off, not the "past the whole
+                // song" extrapolation below (which is only for pixelY past
+                // the actual last line).
+                const next = map[i + 1];
+                if (next && pixelY > seg.pixelBottom && pixelY < next.pixelTop) {
+                    return seg.measureEnd;
                 }
             }
             const last = map[map.length - 1];
@@ -3030,13 +3918,27 @@
             currentMeasurePixelMap = buildMeasurePixelMap();
 
             const sheetPane = document.getElementById('sheetPane');
-            // What's visible right now (wherever the reader has scrolled
-            // the sheet to) determines when scrolling should start: 30
-            // measures before the last one currently in view, so there's
-            // always a few measures of lead-in left on screen when the
-            // sheet begins moving.
-            const lastVisibleMeasure = Math.floor(measureForPixelY(sheetPane.scrollTop + sheetPane.clientHeight));
-            scrollStartMeasure = Math.max(0, lastVisibleMeasure - 30);
+            // Once scrolling is actively moving, the currently-playing line
+            // stays pinned at a fixed distance from the top of the pane -
+            // scrollStartMeasure IS that pinned distance, in measures (see
+            // scrollStep's comment on why it's a gate, not an offset).
+            // Anchoring it to a FIXED MEASURE COUNT (the old "30 measures
+            // before the bottom of what's visible" rule) doesn't generalize:
+            // how many measures fit in a given pixel height depends entirely
+            // on how the sheet is currently rendered - ChordPlayer's tick/
+            // measure-number grid fits far fewer measures per pixel than
+            // Chordpro's plain annotation does (see computeTaggedTiming).
+            // Anchoring to a FRACTION of the pane's own visible height
+            // instead - about a third of the way down, a comfortable
+            // teleprompter-style reading position with context above and
+            // more to read below - adapts automatically to whatever's
+            // actually on screen. measureForPixelY naturally accounts for
+            // the title/header space too: it only knows about real chorded
+            // lines (see buildMeasurePixelMap), so if the 1/3 mark falls
+            // within/above the header it simply resolves to measure 0 - no
+            // lead-in wait, scrolling starts moving immediately.
+            const anchorPixelY = sheetPane.scrollTop + sheetPane.clientHeight / 3;
+            scrollStartMeasure = Math.max(0, measureForPixelY(anchorPixelY));
             setScrollJumpCorrection(scrollStartMeasure);
 
             const lastLineMeasure = currentMeasurePixelMap.length
@@ -3365,7 +4267,7 @@
                         // strum on chord change, plus a once-per-measure
                         // re-strum of whatever chord is still sustaining. A
                         // chord's duration can carry it past a measure
-                        // boundary with no new {cpl_m:} entry marking that
+                        // boundary with no new {x_cpl_m:} entry marking that
                         // measure - meaning it's still ringing into it, not
                         // silent - so re-strum whatever chord is currently
                         // held at the top of every measure that doesn't mark
@@ -3912,6 +4814,10 @@
             }
         });
         document.getElementById('printDiagramsCheck').addEventListener('change', renderActive);
+        document.getElementById('printColorColor').addEventListener('change', renderActive);
+        document.getElementById('printColorBw').addEventListener('change', renderActive);
+        document.getElementById('transposeMinusBtn').addEventListener('click', () => transposeSong(-1));
+        document.getElementById('transposePlusBtn').addEventListener('click', () => transposeSong(1));
 
         document.getElementById('chordDurationSelect').addEventListener('change', regenerateTaggedFromSource);
         document.getElementById('simplifyToggle').addEventListener('change', renderActive);
@@ -3938,7 +4844,7 @@
         //
         // Clicking a chord's own label in the sheet (only while viewing
         // "ChordPlayer" - see syncPaneDisplay's tags-editable class) pops up a
-        // -/+ stepper for that one chord's {cpl_m:D} duration, in 0.25-
+        // -/+ stepper for that one chord's {x_cpl_m:D} duration, in 0.25-
         // measure steps, floored at 0. If the chord has no explicit tag
         // yet, the first click starts from whatever it's currently using
         // (the "Auto chord duration" setting) rather than an arbitrary
@@ -3949,7 +4855,6 @@
         function collectSongLines(song) {
             const lines = [];
             for (const section of song.sections) {
-                if (section.type === 'tab') continue;
                 for (const line of section.lines) {
                     if (line.type === 'line') lines.push(line);
                 }
@@ -3991,7 +4896,244 @@
             renderActive();
         }
 
-        // Adjusts one chord's {cpl_m:D} duration - the parse -> mutate ->
+        // --- Section wrapping (Ctrl+Alt+V/C/B/T) ---
+        //
+        // Lets the user select a range of lines in the rendered sheet (with
+        // "ChordPlayer" tags editable) and wrap them in a new
+        // {sov:}/{eov:}, {soc:}/{eoc:}, {sob:}/{eob:}, or {sot:}/{eot:}
+        // section - purely structural, doesn't touch any chord/lyric data.
+        // Verse/chorus/bridge/tab are all symmetric here: none of them
+        // change how a wrapped line's chords get parsed (see
+        // parseChordPro's per-line, not per-block, tab handling), only
+        // which group/rendering-style it's filed under.
+        //
+        // Scope limit: only works when the whole selected range sits
+        // inside ONE existing section (splitting it into up to three:
+        // before/wrapped/after) - a selection straddling two already-
+        // distinct sections is refused rather than guessing at a merge.
+        const SECTION_WRAP_DEFAULT_LABEL = { chorus: 'Chorus', verse: 'Verse', bridge: 'Bridge', tab: null };
+
+        // Maps the browser's current text selection (if any) inside the
+        // sheet-pane to a [start, end] lineIdx range - the same numbering
+        // data-line-idx/collectSongLines use - by rounding out to every
+        // FULL logical line the selection touches (a wrapped/print-wrapped
+        // line may render as several .sheet-line elements sharing one
+        // data-line-idx - Math.min/max over duplicates is still correct).
+        function getSelectedLineIdxRange() {
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+            const range = sel.getRangeAt(0);
+            const touched = [...document.querySelectorAll('#sheetPane .sheet-line[data-line-idx]')]
+                .filter((el) => range.intersectsNode(el))
+                .map((el) => parseInt(el.dataset.lineIdx, 10));
+            if (!touched.length) return null;
+            return { start: Math.min(...touched), end: Math.max(...touched) };
+        }
+
+        // Splits whichever existing section contains the full
+        // [startLineIdx, endLineIdx] range into up to three sections -
+        // unchanged content before it, a new section of `sectionType`
+        // wrapping exactly the selected lines (and anything - blanks,
+        // comments - sitting between them), and unchanged content after.
+        // Mutates song.sections in place. Returns { ok: true } or
+        // { ok: false, reason: 'straddle' | 'not-found' }.
+        function wrapLinesInSection(song, startLineIdx, endLineIdx, sectionType) {
+            let idx = 0;
+            for (let i = 0; i < song.sections.length; i++) {
+                const section = song.sections[i];
+                const lines = section.lines;
+                let startArrIdx = -1;
+                let endArrIdx = -1;
+                for (let j = 0; j < lines.length; j++) {
+                    if (lines[j].type !== 'line') continue;
+                    if (idx === startLineIdx) startArrIdx = j;
+                    if (idx === endLineIdx) endArrIdx = j + 1;
+                    idx++;
+                }
+                const containsStart = startArrIdx !== -1;
+                const containsEnd = endArrIdx !== -1;
+                if (containsStart !== containsEnd) return { ok: false, reason: 'straddle' };
+                if (!containsStart) continue;
+
+                const before = lines.slice(0, startArrIdx);
+                const wrapped = lines.slice(startArrIdx, endArrIdx);
+                const after = lines.slice(endArrIdx);
+
+                const newSections = [];
+                if (before.length) newSections.push({ ...section, lines: before });
+                newSections.push({ type: sectionType, label: SECTION_WRAP_DEFAULT_LABEL[sectionType], lines: wrapped });
+                if (after.length) newSections.push({ type: 'verse', label: null, lines: after });
+
+                song.sections.splice(i, 1, ...newSections);
+                return { ok: true };
+            }
+            return { ok: false, reason: 'not-found' };
+        }
+
+        // Finds the raw source-text line number (0-based, matching
+        // text.split(/\r?\n/)) of the lineIdx'th chorded/lyric line in
+        // `song` - see parseChordPro's `_rawLine` bookkeeping.
+        function findRawLineForLineIdx(song, targetLineIdx) {
+            let idx = 0;
+            for (const section of song.sections) {
+                for (const line of section.lines) {
+                    if (line.type !== 'line') continue;
+                    if (idx === targetLineIdx) return line._rawLine;
+                    idx++;
+                }
+            }
+            return -1;
+        }
+
+        // Inserts `startTag`/`endTag` as new whole lines immediately before/
+        // after the given lineIdx range, directly in `text` - used for
+        // chordProText, which (unlike chordPlayerText) has no {x_cpl_m:}
+        // timing tags of its own and so can't go through the parse ->
+        // mutate -> buildTaggedChordPro round trip without picking some up.
+        // A plain text insertion has no such side effect.
+        function insertSectionTagsInText(text, startLineIdx, endLineIdx, startTag, endTag) {
+            const song = parseChordPro(text);
+            const startRaw = findRawLineForLineIdx(song, startLineIdx);
+            const endRaw = findRawLineForLineIdx(song, endLineIdx);
+            if (startRaw < 0 || endRaw < 0) return text;
+            const lines = text.split(/\r?\n/);
+            lines.splice(endRaw + 1, 0, endTag);
+            lines.splice(startRaw, 0, startTag);
+            return lines.join('\n');
+        }
+
+        const SECTION_WRAP_TAGS = {
+            verse: ['{sov:}', '{eov:}'],
+            chorus: ['{soc:}', '{eoc:}'],
+            bridge: ['{sob:}', '{eob:}'],
+            tab: ['{sot:}', '{eot:}'],
+        };
+
+        function wrapSelectionInSection(sectionType) {
+            if (!sourceLoaded) return;
+            if (!document.getElementById('sourceViewTagged').checked || !document.getElementById('viewModeSheet').checked) return;
+
+            const range = getSelectedLineIdxRange();
+            if (!range) {
+                alert('Select one or more full lines in the sheet first, then use this shortcut.');
+                return;
+            }
+
+            const song = parseChordPro(chordPlayerText);
+            const result = wrapLinesInSection(song, range.start, range.end, sectionType);
+            if (!result.ok) {
+                alert(result.reason === 'straddle'
+                    ? 'That selection spans more than one existing section - select a range that sits within a single section.'
+                    : 'Could not locate that selection in the song.');
+                return;
+            }
+            commitTaggedSong(song);
+
+            const [startTag, endTag] = SECTION_WRAP_TAGS[sectionType];
+            chordProText = insertSectionTagsInText(chordProText, range.start, range.end, startTag, endTag);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (!e.ctrlKey || !e.altKey) return;
+            // e.code (physical key position, e.g. "KeyV") rather than e.key
+            // - on Mac, holding Option remaps e.key to whatever special
+            // character that Option+letter combo types under the active
+            // keyboard layout (Option+V -> "√" on a US layout, not "v"),
+            // so e.key never matched here. e.code ignores modifiers
+            // entirely and is the correct choice for a shortcut binding.
+            const sectionType = { KeyV: 'verse', KeyC: 'chorus', KeyB: 'bridge', KeyT: 'tab' }[e.code];
+            if (!sectionType) return;
+            e.preventDefault();
+            wrapSelectionInSection(sectionType);
+        });
+
+        // --- Transpose ---
+
+        const SHARP_NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const FLAT_NOTES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+        const NOTE_TO_INDEX = {};
+        SHARP_NOTES.forEach((n, i) => { NOTE_TO_INDEX[n] = i; });
+        FLAT_NOTES.forEach((n, i) => { NOTE_TO_INDEX[n] = i; });
+
+        // Shifts one note name by `semitones`, keeping its own flat/sharp
+        // spelling preference (a flat root stays spelled with flats after
+        // transposing; anything else - sharp or natural - is respelled with
+        // sharps) rather than picking a single scale for the whole song.
+        function transposeNoteName(note, semitones) {
+            const idx = NOTE_TO_INDEX[note];
+            if (idx == null) return null;
+            const preferFlat = note.length > 1 && note[1] === 'b';
+            const newIdx = ((idx + semitones) % 12 + 12) % 12;
+            return (preferFlat ? FLAT_NOTES : SHARP_NOTES)[newIdx];
+        }
+
+        // Transposes a full chord name - root, quality suffix untouched,
+        // and an optional "/bass" slash note transposed independently of
+        // the root (e.g. "D/F#" -> "D#/G" going up a semitone).
+        function transposeChordName(name, semitones) {
+            if (!name) return name;
+            const m = name.match(/^([A-G])([#b]?)(.*)$/);
+            if (!m) return name;
+            const [, root, acc, rest] = m;
+            const rootNote = transposeNoteName(root + acc, semitones);
+            if (rootNote == null) return name;
+            const slash = rest.match(/^(.*)\/([A-G])([#b]?)$/);
+            if (slash) {
+                const [, quality, bassRoot, bassAcc] = slash;
+                const bassNote = transposeNoteName(bassRoot + bassAcc, semitones);
+                return rootNote + quality + '/' + (bassNote != null ? bassNote : bassRoot + bassAcc);
+            }
+            return rootNote + rest;
+        }
+
+        // Transposes the plain Chordpro buffer in place - unlike the tagged
+        // buffer it has no parsed structure to round-trip through
+        // (buildTaggedChordPro always injects {x_cpl_m:} tags), so this
+        // rewrites just the [chord] brackets and the {key:} value directly
+        // in the existing text, leaving everything else - line breaks,
+        // spacing, other directives - untouched.
+        function transposeChordProText(text, semitones) {
+            let out = text.replace(/\[([^\]\n]+)\]/g, (m, name) => `[${transposeChordName(name, semitones)}]`);
+            out = out.replace(/(\{key:\s*)([^}]*?)(\s*\})/i, (m, pre, val, post) => {
+                return val.trim() ? pre + transposeChordName(val.trim(), semitones) + post : m;
+            });
+            return out;
+        }
+
+        // Running count of semitones the loaded song has been transposed by
+        // this session - purely a display/UX aid, reset whenever a new song
+        // is loaded or the song is cleared.
+        let transposeOffset = 0;
+
+        function updateTransposeOffsetLabel() {
+            const label = document.getElementById('transposeOffsetLabel');
+            if (label) label.textContent = (transposeOffset >= 0 ? '+' : '') + transposeOffset;
+        }
+
+        // Transposes every chord in both in-memory buffers (the tagged
+        // ChordPlayer text and the plain Chordpro source text), plus the
+        // {key:} tag, by `semitones`. The tagged buffer goes through the
+        // normal parse -> mutate -> serialize pipeline so the sheet,
+        // legend, and playback all pick up the new chord names
+        // automatically; the plain buffer is rewritten in place since it
+        // has no such pipeline of its own.
+        function transposeSong(semitones) {
+            if (!sourceLoaded || !chordPlayerText || !chordPlayerText.trim()) return;
+            const song = parseChordPro(chordPlayerText);
+            for (const line of collectSongLines(song)) {
+                for (const c of line.chords) {
+                    if (c.chord) c.chord = transposeChordName(c.chord, semitones);
+                }
+            }
+            if (song.key) song.key = transposeChordName(song.key, semitones);
+            if (chordProText) chordProText = transposeChordProText(chordProText, semitones);
+            commitTaggedSong(song);
+
+            transposeOffset += semitones;
+            updateTransposeOffsetLabel();
+        }
+
+        // Adjusts one chord's {x_cpl_m:D} duration - the parse -> mutate ->
         // recompute -> serialize round trip means the duration-only cascade
         // (position is always derived, never stored) reflows every later
         // chord automatically.
@@ -4458,6 +5600,8 @@
             reader.onload = (ev) => loadNewSource(ev.target.result, { fileName: file.name });
             reader.readAsText(file);
         });
+
+        restoreSessionState();
     </script>
 </body>
 </html>

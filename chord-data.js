@@ -2163,10 +2163,17 @@
             return noteSequence[noteIndex];
         }
 
-        function drawChordDiagram(voicing, tuning, showNoteNames = true, showDifficulty = true) {
+        function drawChordDiagram(voicing, tuning, showNoteNames = true, showDifficulty = true, monochrome = false) {
             const [voicingName, frets, notes, intervals, description, , , , barrePosition, positionLabel, flagged, reviewNote, , , difficulty] = voicing;
             // notes is array, intervals is array, description is string
-            
+
+            // Print's "Black & White" mode wants every mark pure black - no
+            // #333/#666 grays - while leaving deliberate white/none fills
+            // (contrast text inside a filled dot, the hollow open-string
+            // ring) alone, since those aren't ink shades, they're structure.
+            const inkColor = monochrome ? '#000' : '#333';
+            const fretNumColor = monochrome ? '#000' : '#666';
+
             // Create a map from pitch to note name using the correct notes array
             const notePitchMap = {};
             if (notes && notes.length > 0) {
@@ -2259,7 +2266,7 @@
                 difficultyLabel.setAttribute('font-size', '12');
                 difficultyLabel.setAttribute('font-weight', 'normal');
                 difficultyLabel.setAttribute('font-family', 'Arial, sans-serif');
-                difficultyLabel.setAttribute('fill', '#333');
+                difficultyLabel.setAttribute('fill', inkColor);
                 difficultyLabel.setAttribute('text-anchor', 'middle');
                 const difficultyText = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
                 difficultyLabel.textContent = '(' + difficultyText + ')';
@@ -2273,7 +2280,7 @@
             chordTitle.setAttribute('font-size', '20');
             chordTitle.setAttribute('font-weight', 'bold');
             chordTitle.setAttribute('font-family', 'Arial, sans-serif');
-            chordTitle.setAttribute('fill', '#333');
+            chordTitle.setAttribute('fill', inkColor);
             chordTitle.setAttribute('text-anchor', 'middle');
             chordTitle.textContent = voicingName;
             svg.appendChild(chordTitle);
@@ -2298,7 +2305,7 @@
                 posLabel.setAttribute('font-size', '12');
                 posLabel.setAttribute('font-weight', 'normal');
                 posLabel.setAttribute('font-family', 'Arial, sans-serif');
-                posLabel.setAttribute('fill', '#333');
+                posLabel.setAttribute('fill', inkColor);
                 posLabel.setAttribute('text-anchor', 'middle');
                 posLabel.textContent = positionLabel;
                 svg.appendChild(posLabel);
@@ -2314,7 +2321,7 @@
                 line.setAttribute('y1', y);
                 line.setAttribute('x2', leftPadding + diagramWidth);
                 line.setAttribute('y2', y);
-                line.setAttribute('stroke', '#333');
+                line.setAttribute('stroke', inkColor);
                 // Thicker line only for nut (i === 0 AND displayStartFret === 1)
                 line.setAttribute('stroke-width', (i === 0 && displayStartFret === 1) ? 3 : 1);
                 svg.appendChild(line);
@@ -2328,7 +2335,7 @@
                 line.setAttribute('y1', topPadding);
                 line.setAttribute('x2', x);
                 line.setAttribute('y2', topPadding + diagramHeight);
-                line.setAttribute('stroke', '#333');
+                line.setAttribute('stroke', inkColor);
                 line.setAttribute('stroke-width', 2);
                 svg.appendChild(line);
             }
@@ -2343,7 +2350,7 @@
                 text.setAttribute('font-size', '12');
                 text.setAttribute('font-weight', '600');
                 text.setAttribute('font-family', 'Arial, sans-serif');
-                text.setAttribute('fill', '#666');
+                text.setAttribute('fill', fretNumColor);
                 text.setAttribute('text-anchor', 'end');
                 text.setAttribute('dominant-baseline', 'middle');
                 text.textContent = fretNum;
@@ -2359,7 +2366,7 @@
                 text.setAttribute('font-size', '12');
                 text.setAttribute('font-weight', '600');
                 text.setAttribute('font-family', 'Arial, sans-serif');
-                text.setAttribute('fill', '#333');
+                text.setAttribute('fill', inkColor);
                 text.setAttribute('text-anchor', 'middle');
                 text.textContent = stringNames[i];
                 svg.appendChild(text);
@@ -2393,7 +2400,7 @@
                     barreLine.setAttribute('y1', y);
                     barreLine.setAttribute('x2', x2);
                     barreLine.setAttribute('y2', y);
-                    barreLine.setAttribute('stroke', '#333');
+                    barreLine.setAttribute('stroke', inkColor);
                     barreLine.setAttribute('stroke-width', 12); // Half of dot diameter (12)
                     barreLine.setAttribute('stroke-linecap', 'round');
                     svg.appendChild(barreLine);
@@ -2411,7 +2418,7 @@
                     circle.setAttribute('cy', topPadding - 17);
                     circle.setAttribute('r', 12);
                     circle.setAttribute('fill', 'none');
-                    circle.setAttribute('stroke', '#333');
+                    circle.setAttribute('stroke', inkColor);
                     circle.setAttribute('stroke-width', 2);
                     svg.appendChild(circle);
                     
@@ -2431,7 +2438,7 @@
                             noteText.setAttribute('font-size', '9');
                             noteText.setAttribute('font-weight', '600');
                             noteText.setAttribute('font-family', 'Arial, sans-serif');
-                            noteText.setAttribute('fill', '#333');
+                            noteText.setAttribute('fill', inkColor);
                             noteText.setAttribute('text-anchor', 'middle');
                             noteText.textContent = displayNote;
                             svg.appendChild(noteText);
@@ -2445,7 +2452,7 @@
                     line1.setAttribute('y1', topPadding - 17 - size);
                     line1.setAttribute('x2', x + size);
                     line1.setAttribute('y2', topPadding - 17 + size);
-                    line1.setAttribute('stroke', '#333');
+                    line1.setAttribute('stroke', inkColor);
                     line1.setAttribute('stroke-width', 2);
                     
                     const line2 = document.createElementNS(svgNS, 'line');
@@ -2453,7 +2460,7 @@
                     line2.setAttribute('y1', topPadding - 17 + size);
                     line2.setAttribute('x2', x + size);
                     line2.setAttribute('y2', topPadding - 17 - size);
-                    line2.setAttribute('stroke', '#333');
+                    line2.setAttribute('stroke', inkColor);
                     line2.setAttribute('stroke-width', 2);
                     
                     g.appendChild(line1);
@@ -2478,7 +2485,7 @@
                             circle.setAttribute('cx', x);
                             circle.setAttribute('cy', y);
                             circle.setAttribute('r', 12);
-                            circle.setAttribute('fill', '#333');
+                            circle.setAttribute('fill', inkColor);
                             svg.appendChild(circle);
                             
                             // Show note name inside dot
