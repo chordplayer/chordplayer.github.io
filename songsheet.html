@@ -59,6 +59,7 @@
        .settings-row) - Load/Convert/Save-related on top, view/timing
        controls below. */
     .chordplayer-bar {
+        position: relative;
         display: flex;
         flex-direction: column;
         gap: 4px;
@@ -67,6 +68,39 @@
         border-radius: 8px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         padding: 6px 40px;
+    }
+
+    /* Shown/hidden by updateScrollIndicators() based on whether the
+       locked-together .settings-row/.player-bar-row pair can actually
+       scroll further that way - sits in the container's side padding, so
+       it doesn't overlap any control. */
+    .scroll-indicator {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        display: none;
+        align-items: center;
+        width: 40px;
+        font-size: 18px;
+        color: #1a73e8;
+        pointer-events: none;
+        z-index: 6;
+    }
+
+    .scroll-indicator.visible {
+        display: flex;
+    }
+
+    .scroll-indicator-left {
+        left: 0;
+        justify-content: flex-start;
+        background: linear-gradient(to right, #fff 40%, rgba(255,255,255,0));
+    }
+
+    .scroll-indicator-right {
+        right: 0;
+        justify-content: flex-end;
+        background: linear-gradient(to left, #fff 40%, rgba(255,255,255,0));
     }
 
     /* On a viewport too narrow to fit every control, the row scrolls
@@ -254,6 +288,7 @@
        dot alone to show which one's active. */
     .segmented {
         display: flex;
+        flex-shrink: 0;
         border: 1px solid #1a73e8;
         border-radius: 6px;
         overflow: hidden;
@@ -1344,6 +1379,8 @@
     </div>
 
     <div class="chordplayer-bar">
+        <div class="scroll-indicator scroll-indicator-left" aria-hidden="true">&#8249;</div>
+        <div class="scroll-indicator scroll-indicator-right" aria-hidden="true">&#8250;</div>
         <div class="settings-row">
             <label class="file-btn" for="fileInput">Load Song File</label>
             <input type="file" id="fileInput">
@@ -1369,6 +1406,12 @@
                 <label><input type="radio" name="viewMode" id="viewModeSheet"> Sheet</label>
                 <label><input type="radio" name="viewMode" id="viewModeRaw"> Raw</label>
             </div>
+            <div class="transpose-control">
+                <button type="button" id="transposeMinusBtn" title="Transpose down a semitone">&minus;</button>
+                <span>Transpose</span>
+                <button type="button" id="transposePlusBtn" title="Transpose up a semitone">+</button>
+                <span id="transposeOffsetLabel">+0</span>
+            </div>
             <div class="time-sig-control">
                 <label for="timeSignatureSelect">Time</label>
                 <select id="timeSignatureSelect">
@@ -1390,12 +1433,6 @@
                     <option value="0.5">Half measure</option>
                     <option value="0.25">Quarter measure</option>
                 </select>
-            </div>
-            <div class="transpose-control">
-                <button type="button" id="transposeMinusBtn" title="Transpose down a semitone">&minus;</button>
-                <span>Transpose</span>
-                <button type="button" id="transposePlusBtn" title="Transpose up a semitone">+</button>
-                <span id="transposeOffsetLabel">+0</span>
             </div>
         </div>
     </div>
@@ -1489,6 +1526,8 @@
     </div>
 
     <div class="player-bar" id="playerBar">
+        <div class="scroll-indicator scroll-indicator-left" aria-hidden="true">&#8249;</div>
+        <div class="scroll-indicator scroll-indicator-right" aria-hidden="true">&#8250;</div>
         <div class="player-bar-row">
             <button class="player-btn player-stack-btn" id="topBtn">&#8593; Top</button>
             <div class="speed-control">
@@ -3336,6 +3375,11 @@
 
             document.getElementById('playerBar').classList.add('visible');
             updateSheetPaneHeight();
+            // .player-bar-row was width:0/hidden until now (display:none
+            // parent) - the scroll-lock setup's indicator check ran too
+            // early to measure it, so re-run it via the same 'resize'
+            // listener it's already subscribed to.
+            window.dispatchEvent(new Event('resize'));
             document.title = (currentSong.title ? currentSong.title + ' — ' : '') + 'ChordPlayer';
             detectAndLoadVideoUrl(chordProText);
 
@@ -5744,6 +5788,48 @@
             e.target.textContent = minimized ? 'Show Video' : 'Hide Video';
             e.target.classList.toggle('active', !minimized);
         });
+
+        // Swiping either row of .chordplayer-bar's two .settings-row - or
+        // .player-bar's two .player-bar-row - moves both in unison, so a
+        // control's horizontal position stays aligned between the rows
+        // instead of the two drifting independently as you scroll each on
+        // its own. The syncing flag guards against the ping-pong loop
+        // setting scrollLeft on the other row would otherwise trigger via
+        // its own scroll listener. Also shows/hides the left/right
+        // .scroll-indicator carets in the container's side padding
+        // whenever the (locked-together) rows can actually scroll further
+        // that way - checking just the first row's metrics is enough
+        // since all rows in the group share the same scroll position.
+        function lockHorizontalScroll(containerSelector, rowSelector) {
+            document.querySelectorAll(containerSelector).forEach((container) => {
+                const rows = Array.from(container.querySelectorAll(rowSelector));
+                if (!rows.length) return;
+                const leftIndicator = container.querySelector('.scroll-indicator-left');
+                const rightIndicator = container.querySelector('.scroll-indicator-right');
+                const updateIndicators = () => {
+                    const row = rows[0];
+                    const maxScroll = row.scrollWidth - row.clientWidth;
+                    if (leftIndicator) leftIndicator.classList.toggle('visible', row.scrollLeft > 1);
+                    if (rightIndicator) rightIndicator.classList.toggle('visible', row.scrollLeft < maxScroll - 1);
+                };
+                let syncing = false;
+                rows.forEach((row) => {
+                    row.addEventListener('scroll', () => {
+                        if (syncing) return;
+                        syncing = true;
+                        rows.forEach((other) => {
+                            if (other !== row) other.scrollLeft = row.scrollLeft;
+                        });
+                        syncing = false;
+                        updateIndicators();
+                    });
+                });
+                updateIndicators();
+                window.addEventListener('resize', updateIndicators);
+            });
+        }
+        lockHorizontalScroll('.chordplayer-bar', '.settings-row');
+        lockHorizontalScroll('.player-bar', '.player-bar-row');
 
         restoreSessionState();
     </script>
