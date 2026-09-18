@@ -1141,25 +1141,18 @@
         .print-sheet { display: block !important; }
         body { background: #fff; }
 
-        /* position: fixed repeats the legend on every printed page in
-           Chrome's print/PDF engine - no other way to repeat a strip
-           without a table's <thead>, which only repeats a top row (this is
-           effectively the same trick, just applied to a top strip instead
-           of a side column). */
+        /* Ordinary flow, not position:fixed - the strip should print once,
+           at the top of page 1 only, not repeat on every page. It comes
+           first in the DOM (see .print-sheet markup) so it just sits above
+           print-body-content in normal document flow. */
         .print-legend-fixed {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
             width: auto;
         }
         /* Overrides the on-screen legend-grid's column layout (shared markup
            with the on-screen legend-pane) with a single row that spans the
            full page width - diagrams shrink to fit via flex instead of
            wrapping into more columns, since the SVGs scale to whatever
-           width their cell gives them. print-legend-bar-height is written
-           by JS (see updatePrintLegendBarHeight) since the actual height
-           depends on how narrow the diagrams had to shrink to fit one row. */
+           width their cell gives them. */
         .print-legend-fixed .legend-grid {
             display: flex;
             flex-wrap: nowrap;
@@ -1172,9 +1165,6 @@
             min-width: 0;
             max-width: 90px;
         }
-        .print-body-content {
-            margin-top: var(--print-legend-bar-height, 0px);
-        }
         .legend-pane, .sheet-pane { box-shadow: none; padding: 0; }
 
         /* Set whenever the print output shouldn't show the chord-diagram
@@ -1183,9 +1173,6 @@
            Doesn't touch the on-screen legend-pane, only the print one. */
         .print-sheet.no-legend .print-legend-fixed {
             display: none !important;
-        }
-        .print-sheet.no-legend .print-body-content {
-            margin-top: 0 !important;
         }
 
         .print-raw-text {
@@ -1258,14 +1245,14 @@
     }
 
     /* Chrome's browser-default print margin is ~0.4in (~38px); this sets it
-       about 10px less top/bottom. Adjust if your default margin differs. */
+       about 10px less top/bottom, and left/right to a standard .75in. */
     @page {
         margin-top: .6in;
         margin-bottom: .6in;
-        margin-left: .4in;
+        margin-left: .75in;
+        margin-right: .75in;
     }
 </style>
-<style id="printMarginOverride"></style>
 <style id="printFontSizeOverride"></style>
 </head>
 <body>
@@ -1402,14 +1389,13 @@
     </div>
 
     <div class="print-sheet">
-        <!-- print-body-content comes first in the DOM, ahead of the fixed
-             legend - Chrome's print/PDF engine can otherwise reserve
-             blank flow-space on page 1 equal to the legend's own height,
-             even though position:fixed removes it from flow visually. -->
-        <div class="print-body-content" id="printBody"></div>
+        <!-- Ordinary flow now (not position:fixed), so it has to come
+             first in the DOM to print once at the top of page 1 - it no
+             longer repeats on later pages. -->
         <div class="print-legend-fixed">
             <div id="printLegend"></div>
         </div>
+        <div class="print-body-content" id="printBody"></div>
     </div>
 
     <div class="save-dialog-overlay" id="saveDialogOverlay">
@@ -2706,43 +2692,6 @@
             document.getElementById('printLegend').innerHTML = isPrintBw()
                 ? buildLegendHTML(currentChordNames, { ...baseOpts, monochrome: true })
                 : colorHtml;
-
-            updatePrintLegendBarHeight(baseOpts.showIntervals);
-        }
-
-        // The print legend is a single row spanning the full page width
-        // (see .print-legend-fixed .legend-grid), so unlike the old side
-        // column its height isn't fixed - it depends on how narrow each
-        // diagram had to shrink to fit every chord in one row. Computed
-        // the same way getPrintWrapMaxChars approximates print geometry
-        // (assumed page width, no real measurement of the display:none
-        // print target), then written to a CSS custom property that
-        // .print-body-content's margin-top reads.
-        const LEGEND_CELL_MAX_WIDTH_PX = 90;
-        const LEGEND_CELL_GAP_PX = 6;
-        const LEGEND_BAR_PADDING_PX = 16;
-        // drawChordDiagram's viewBox is (width+leftMargin) x height = 210 x
-        // ~220 once the legend crops the position-label row out (see
-        // buildLegendHTML's SHIFT logic) - this is that box's height/width
-        // ratio, used to derive diagram height from whatever width a cell
-        // actually gets.
-        const LEGEND_DIAGRAM_ASPECT = 220 / 210;
-
-        function updatePrintLegendBarHeight(showIntervals) {
-            const chordCount = currentChordNames.length;
-            if (!chordCount) {
-                document.documentElement.style.setProperty('--print-legend-bar-height', '0px');
-                return;
-            }
-            const pageContentPx = (PRINT_PAGE_WIDTH_IN - PRINT_SIDE_MARGIN_IN * 2) * PRINT_CSS_DPI;
-            const cellWidth = Math.min(
-                LEGEND_CELL_MAX_WIDTH_PX,
-                (pageContentPx - LEGEND_CELL_GAP_PX * (chordCount - 1)) / chordCount
-            );
-            const diagramHeightPx = cellWidth * LEGEND_DIAGRAM_ASPECT;
-            const textAllowancePx = 17 + (showIntervals ? 13 : 0);
-            const barHeight = Math.ceil(diagramHeightPx + textAllowancePx + LEGEND_BAR_PADDING_PX);
-            document.documentElement.style.setProperty('--print-legend-bar-height', barHeight + 'px');
         }
 
         // Clicking a legend diagram that has more than one voicing cycles
@@ -2872,17 +2821,10 @@
         // Print page geometry - the print target (#printBody) is
         // display:none until the browser's own print pass and isn't
         // otherwise measurable, so its available width is approximated
-        // (see the @page rule's own comment): US Letter at Chrome's ~0.4in
-        // default side margin. Adjust PRINT_SIDE_MARGIN_IN if your printed
-        // output still clips with a non-default margin.
+        // from the @page margins set above (standard .75in left/right).
         const PRINT_PAGE_WIDTH_IN = 8.5;
-        const PRINT_SIDE_MARGIN_IN = 0.4;
+        const PRINT_SIDE_MARGIN_IN = 0.75;
         const PRINT_CSS_DPI = 96;
-        // Total left margin (see printMarginOverride) when Song Sheet print
-        // excludes diagrams - the extra beyond PRINT_SIDE_MARGIN_IN must be
-        // subtracted from available width too, or the font-size calc
-        // overestimates it and lines clip the right edge.
-        const PRINT_NO_LEGEND_MARGIN_LEFT_IN = 0.75;
         const PRINT_BASE_FONT_PT = 13;
         const PRINT_MIN_FONT_PT = 6;
 
@@ -2894,11 +2836,8 @@
         // unreadable on a very long stray line.
         function getPrintFontSizePt(maxLineChars) {
             if (!maxLineChars) return PRINT_BASE_FONT_PT;
-            const showSheet = document.getElementById('viewModeSheet').checked;
-            const includeDiagrams = document.getElementById('printDiagramsCheck').checked;
-            const extraMarginPx = (showSheet && !includeDiagrams) ? (PRINT_NO_LEGEND_MARGIN_LEFT_IN - PRINT_SIDE_MARGIN_IN) * PRINT_CSS_DPI : 0;
             const pageContentPx = (PRINT_PAGE_WIDTH_IN - PRINT_SIDE_MARGIN_IN * 2) * PRINT_CSS_DPI;
-            const availablePx = Math.max(0, pageContentPx - extraMarginPx - 8);
+            const availablePx = Math.max(0, pageContentPx - 8);
             const refCharWidthPx = measureMonospaceCharWidthPx(PRINT_BASE_FONT_PT + 'pt');
             const naturalWidthPx = maxLineChars * refCharWidthPx;
             if (naturalWidthPx <= availablePx) return PRINT_BASE_FONT_PT;
@@ -2942,7 +2881,6 @@
             const showSheet = document.getElementById('viewModeSheet').checked;
             const printSheet = document.querySelector('.print-sheet');
             printSheet.classList.toggle('print-bw', isPrintBw());
-            let widenLeftMargin = false;
             let fontSizePt = PRINT_BASE_FONT_PT;
             if (showSheet) {
                 // maxChars=0: no word-wrapping - every source line stays on
@@ -2951,7 +2889,6 @@
                 document.getElementById('printBody').innerHTML = printHTML;
                 const includeDiagrams = document.getElementById('printDiagramsCheck').checked;
                 printSheet.classList.toggle('no-legend', !includeDiagrams);
-                widenLeftMargin = !includeDiagrams;
                 fontSizePt = getPrintFontSizePt(computeMaxPrintLineChars(displaySong, timing, markTime));
             } else {
                 const showTagged = document.getElementById('sourceViewTagged').checked;
@@ -2959,15 +2896,6 @@
                 document.getElementById('printBody').innerHTML = `<pre class="print-raw-text">${escapeHtml(text)}</pre>`;
                 printSheet.classList.add('no-legend');
             }
-            // Song Sheet PDF only: with diagrams excluded there's no legend
-            // strip taking up its own space either way (see the
-            // print-legend-fixed CSS), so the left margin is widened just
-            // to keep the text block from looking lopsided. @page margins
-            // are static CSS, not reachable via a class toggle, so this
-            // rewrites a dedicated <style> tag instead.
-            document.getElementById('printMarginOverride').textContent = widenLeftMargin
-                ? `@page { margin-left: ${PRINT_NO_LEGEND_MARGIN_LEFT_IN}in; }`
-                : '';
             document.getElementById('printFontSizeOverride').textContent = fontSizePt < PRINT_BASE_FONT_PT
                 ? `@media print { .sheet-lyric, .sheet-chords, .sheet-grid { font-size: ${fontSizePt.toFixed(2)}pt !important; } }`
                 : '';
