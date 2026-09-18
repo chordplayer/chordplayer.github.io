@@ -2739,6 +2739,8 @@
             document.getElementById('printLegend').innerHTML = isPrintBw()
                 ? buildLegendHTML(currentChordNames, { ...baseOpts, monochrome: true })
                 : colorHtml;
+
+            updateSheetPaneHeight();
         }
 
         // Clicking a legend diagram that has more than one voicing cycles
@@ -2962,12 +2964,22 @@
         function updateSheetPaneHeight() {
             const settingsBar = document.querySelector('.chordplayer-bar');
             const twoPane = document.querySelector('.two-pane');
+            const legendPane = document.getElementById('legendPaneContainer');
             const playerBar = document.getElementById('playerBar');
             if (!settingsBar || !twoPane) return;
             const settingsRect = settingsBar.getBoundingClientRect();
             const gap = twoPane.getBoundingClientRect().top - settingsRect.bottom;
+            // .legend-pane sits below #rawPane/#sheetPane in the same
+            // column now (full-width strip, not a side-by-side sidebar) -
+            // its height has to come out of the lyrics pane's own budget so
+            // the diagrams strip lands anchored right above .player-bar
+            // instead of pushing the page taller and requiring a scroll
+            // past the fixed player bar to reach it.
+            const legendHeight = (legendPane && !legendPane.classList.contains('hidden'))
+                ? legendPane.getBoundingClientRect().height + 12
+                : 0;
             const playerBarHeight = playerBar.classList.contains('visible') ? playerBar.getBoundingClientRect().height : 0;
-            const available = window.innerHeight - settingsRect.height - gap - playerBarHeight;
+            const available = window.innerHeight - settingsRect.height - gap - legendHeight - playerBarHeight;
             document.documentElement.style.setProperty('--pane-height', Math.max(200, Math.round(available)) + 'px');
         }
         window.addEventListener('resize', updateSheetPaneHeight);
@@ -5685,6 +5697,7 @@
             const hidden = document.getElementById('legendPaneContainer').classList.toggle('hidden');
             e.target.textContent = hidden ? 'Show Diagrams' : 'Hide Diagrams';
             e.target.classList.toggle('active', !hidden);
+            updateSheetPaneHeight();
         });
 
         document.getElementById('videoMinimizeBtn').addEventListener('click', (e) => {
