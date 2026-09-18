@@ -1215,6 +1215,15 @@
             font-size: 22pt;
         }
 
+        /* Chords print heavier than lyrics so they still stand out even
+           though both are bold on screen. */
+        .sheet-lyric {
+            font-weight: 700;
+        }
+        .chord-label, .sheet-chords {
+            font-weight: 800;
+        }
+
         /* "Black & White" PDF mode (see #printColorBw) - every bit
            of ink pure #000, no grays/blue. Diagram SVGs are handled
            separately (see drawChordDiagram's monochrome param in
