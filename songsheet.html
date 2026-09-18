@@ -69,10 +69,16 @@
         padding: 6px 40px;
     }
 
+    /* On a viewport too narrow to fit every control, the row scrolls
+       horizontally (swipe on touch) instead of wrapping controls onto a
+       second line or clipping them off unreachable. */
     .settings-row {
         display: flex;
         align-items: center;
         gap: 16px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     /* Matches the segmented controls' own label sizing (padding/font-size
@@ -187,7 +193,9 @@
         display: flex;
         gap: 16px;
         align-items: center;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
         margin-bottom: 10px;
     }
 
@@ -219,6 +227,24 @@
         align-items: center;
         gap: 6px;
         cursor: pointer;
+    }
+
+    /* Every control label/row across the settings bar, player bar, and
+       diagrams panel stays on one line - wrapping mid-label (e.g. "Note
+       Names" breaking after "Note") reads as broken text, not a
+       responsive layout. */
+    .chordplayer-bar label,
+    .player-bar label,
+    .legend-pane label,
+    .video-panel label,
+    .player-btn,
+    .speed-control,
+    .speed-control span,
+    .play-chords-toggle,
+    .time-sig-control,
+    .chord-duration-control,
+    .transpose-control {
+        white-space: nowrap;
     }
 
     /* Groups a pair of related radio options (Chordpro/Chordplayer,
@@ -298,10 +324,14 @@
         display: flex;
     }
 
+    /* Same swipe-to-reach-cut-off-controls behavior as .settings-row. */
     .player-bar-row {
         display: flex;
         align-items: center;
         gap: 24px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     /* Same padding/font/color/border-radius as the
@@ -1463,7 +1493,7 @@
             <button class="player-btn player-stack-btn" id="topBtn">&#8593; Top</button>
             <div class="speed-control">
                 <label for="bpmSlider">Tempo</label>
-                <input type="range" id="bpmSlider" min="20" max="200" step="1" value="80">
+                <input type="range" id="bpmSlider" min="40" max="220" step="1" value="80">
                 <button type="button" class="player-btn" id="tapTempoBtn">Tap</button>
                 <span id="bpmLabel">80 BPM</span>
             </div>
