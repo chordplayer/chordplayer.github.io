@@ -563,14 +563,19 @@
         padding: 10px 10px 8px;
     }
 
-    .video-panel-header {
+    .video-panel-header,
+    .legend-pane-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
     }
 
-    .video-minimize-btn {
+    .legend-pane-header {
+        margin-bottom: 10px;
+    }
+
+    .minimize-btn {
         border: none;
         background: none;
         color: #666;
@@ -580,21 +585,25 @@
         padding: 2px 4px;
     }
 
-    .video-minimize-btn:hover {
+    .minimize-btn:hover {
         color: #1a73e8;
     }
 
-    /* Minimized keeps the header (and everything's DOM presence, including
-       the YouTube iframe) intact - only visually collapses the rest, so a
-       playing video keeps playing while tucked out of the way. Width
-       shrinks to fit the header alone instead of staying at the full
-       220px, so the collapsed panel reads as a pill rather than a mostly-
-       empty box. */
-    .video-panel.minimized {
+    /* Minimized keeps the header (and, for the video panel, the YouTube
+       iframe) intact - only visually collapses the rest, so a playing
+       video keeps playing while tucked out of the way. Width shrinks to
+       fit the header alone instead of staying at full size, so the
+       collapsed panel reads as a pill rather than a mostly-empty box; for
+       .legend-pane (a real flex sibling of the sheet, not an absolutely
+       positioned overlay like .video-panel) that width collapse is also
+       what lets the lyrics pane reclaim the freed space. */
+    .video-panel.minimized,
+    .legend-pane.minimized {
         width: auto;
     }
 
-    .video-panel.minimized .video-panel-header ~ * {
+    .video-panel.minimized .video-panel-header ~ *,
+    .legend-pane.minimized .legend-pane-header ~ * {
         display: none;
     }
 
@@ -1314,7 +1323,6 @@
             <label class="file-btn" for="fileInput">Load Song File</label>
             <input type="file" id="fileInput">
             <button class="print-btn" id="clearSongBtn">Clear Song</button>
-            <label class="print-diagrams-toggle"><input type="checkbox" id="showDiagramsToggle" checked> Show chord diagrams</label>
             <div class="settings-actions">
                 <button class="print-btn" id="saveBtn">Save ChordPlayer</button>
                 <button class="print-btn" id="printBtn">Print / Save PDF</button>
@@ -1389,7 +1397,7 @@
                     <div class="video-panel" id="videoPanel">
                         <div class="video-panel-header">
                             <label for="youtubeUrlInput" class="legend-title" style="margin-bottom:0">Video</label>
-                            <button type="button" class="video-minimize-btn" id="videoMinimizeBtn" title="Minimize">&ndash;</button>
+                            <button type="button" class="minimize-btn" id="videoMinimizeBtn" title="Minimize">&ndash;</button>
                         </div>
                         <input type="text" id="youtubeUrlInput" placeholder="Paste a YouTube URL…">
                         <div class="video-embed-frame" id="videoEmbedFrame" style="display:none">
@@ -1422,6 +1430,10 @@
                     </div>
                 </div>
                 <div class="legend-pane" id="legendPaneContainer">
+                    <div class="legend-pane-header">
+                        <span class="legend-title" style="margin-bottom:0">Chords</span>
+                        <button type="button" class="minimize-btn" id="diagramsMinimizeBtn" title="Minimize">&ndash;</button>
+                    </div>
                     <label class="simplify-toggle"><input type="checkbox" id="simplifyToggle"> Simplify chords</label>
                     <div class="legend-controls">
                         <label class="simplify-toggle"><input type="checkbox" id="legendShowNotes"> Note Names</label>
@@ -3397,7 +3409,7 @@
             'bpmSlider', 'toneSelect', 'strumPatternSelect', 'accentContrastSlider',
             'chordVolumeSlider', 'metronomeToggle', 'metronomeVolumeSlider',
             'videoVolumeSlider', 'videoSpeedSelect', 'youtubeUrlInput',
-            'printColorColor', 'printColorBw', 'showDiagramsToggle',
+            'printColorColor', 'printColorBw',
         ];
 
         function saveSessionState() {
@@ -5679,17 +5691,17 @@
             reader.readAsText(file);
         });
 
-        document.getElementById('showDiagramsToggle').addEventListener('change', (e) => {
-            document.getElementById('legendPaneContainer').style.display = e.target.checked ? '' : 'none';
-        });
-
-        document.getElementById('videoMinimizeBtn').addEventListener('click', () => {
-            const panel = document.getElementById('videoPanel');
-            const minimized = panel.classList.toggle('minimized');
-            const btn = document.getElementById('videoMinimizeBtn');
-            btn.textContent = minimized ? '▢' : '–';
-            btn.title = minimized ? 'Restore' : 'Minimize';
-        });
+        function setupMinimizeButton(btnId, panelId) {
+            document.getElementById(btnId).addEventListener('click', () => {
+                const panel = document.getElementById(panelId);
+                const minimized = panel.classList.toggle('minimized');
+                const btn = document.getElementById(btnId);
+                btn.textContent = minimized ? '▢' : '–';
+                btn.title = minimized ? 'Restore' : 'Minimize';
+            });
+        }
+        setupMinimizeButton('videoMinimizeBtn', 'videoPanel');
+        setupMinimizeButton('diagramsMinimizeBtn', 'legendPaneContainer');
 
         restoreSessionState();
     </script>
