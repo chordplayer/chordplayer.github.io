@@ -1581,9 +1581,9 @@
             <button class="player-btn player-stack-btn" id="topBtn">&#8593; Top</button>
             <div class="speed-control">
                 <label for="bpmSlider">Tempo</label>
-                <input type="range" id="bpmSlider" min="40" max="220" step="1" value="80">
+                <input type="range" id="bpmSlider" min="40" max="220" step="1" value="100">
                 <button type="button" class="player-btn" id="tapTempoBtn">Tap</button>
-                <span id="bpmLabel">80 BPM</span>
+                <span id="bpmLabel">100 BPM</span>
             </div>
             <button type="button" class="player-btn" id="metronomePlayBtn">&#9654;</button>
             <div class="chord-duration-control">
@@ -3880,7 +3880,7 @@
         //    reached its own bottom.
 
         let isScrolling = false;
-        let bpm = 80;
+        let bpm = 100;
         let lastFrameTime = null;
 
         function updateBpmLabel() {
