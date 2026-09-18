@@ -1216,12 +1216,16 @@
         }
 
         /* Chords print heavier than lyrics so they still stand out even
-           though both are bold on screen. */
+           though both are bold on screen. SF Mono/Menlo/Consolas only ship
+           Regular/Bold faces - font-weight above 700 has no heavier face to
+           select and silently collapses back to Bold, so the extra weight
+           is faked with a text stroke on top of Bold instead. */
         .sheet-lyric {
             font-weight: 700;
         }
         .chord-label, .sheet-chords {
-            font-weight: 800;
+            font-weight: 700;
+            -webkit-text-stroke: 0.4px currentColor;
         }
 
         /* "Black & White" PDF mode (see #printColorBw) - every bit
