@@ -5694,10 +5694,19 @@
         });
 
         document.getElementById('diagramsMinimizeBtn').addEventListener('click', (e) => {
+            // Toggling .hidden changes #outputArea's total height (the
+            // diagrams panel sits in normal flow below the lyrics pane,
+            // not overlaid like .video-panel) - on a browser window short
+            // enough that the page itself scrolls, shrinking that height
+            // makes the browser clamp scrollY back down, which reads as
+            // the viewport jumping to the top. Capture/restore scrollY
+            // around the reflow so the toggle doesn't move the viewport.
+            const scrollY = window.scrollY;
             const hidden = document.getElementById('legendPaneContainer').classList.toggle('hidden');
             e.target.textContent = hidden ? 'Show Diagrams' : 'Hide Diagrams';
             e.target.classList.toggle('active', !hidden);
             updateSheetPaneHeight();
+            requestAnimationFrame(() => window.scrollTo(0, scrollY));
         });
 
         document.getElementById('videoMinimizeBtn').addEventListener('click', (e) => {
