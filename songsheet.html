@@ -4789,10 +4789,15 @@
             stopAllChordAudio();
             setScrollButtonRunning(false);
             updateResumeFlashDOM();
-            // The chordplayer sheet just stopped playing - nothing left to
-            // sync the metronome to, so if it was on, fall back to its own
-            // free-running click instead of just going silent.
-            if (metronomeOn) startStandaloneMetronome();
+            // Scroll stopping also stops the metronome if it was on and
+            // synced to that playback - it doesn't fall back to a
+            // free-running click on its own; starting it again (standalone
+            // or synced to the next Scroll) is a separate press of
+            // #metronomePlayBtn.
+            if (metronomeOn) {
+                metronomeOn = false;
+                setMetronomeButtonOn(false);
+            }
         }
 
         document.getElementById('scrollToggleBtn').addEventListener('click', () => {
