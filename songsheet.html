@@ -1277,7 +1277,7 @@
     <div class="chordplayer-bar">
         <div class="settings-row">
             <label class="file-btn" for="fileInput">Load Song File</label>
-            <input type="file" id="fileInput" accept=".pro,.cho,.chopro,.crd,.txt,.chordplayer">
+            <input type="file" id="fileInput">
             <button class="print-btn" id="clearSongBtn">Clear Song</button>
             <div class="settings-actions">
                 <button class="print-btn" id="saveBtn">Save ChordPlayer</button>
@@ -5594,9 +5594,21 @@
         // has no folder-memory picker to break.
         const fsaSupported = typeof window.showOpenFilePicker === 'function';
 
+        // The <input> has no accept filter (iOS Safari grays out files in
+        // iCloud Drive whose extension has no registered UTType, which
+        // includes .pro/.cho/.chopro/.crd/.chordplayer) - so any file can
+        // be picked here, and unsupported extensions are caught after the
+        // fact instead.
+        const SUPPORTED_LOAD_EXTENSIONS = ['.pro', '.cho', '.chopro', '.crd', '.txt', '.chordplayer'];
         document.getElementById('fileInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
+            const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+            if (!SUPPORTED_LOAD_EXTENSIONS.includes(ext)) {
+                alert(`"${file.name}" doesn't look like a ChordPlayer/ChordPro file (expected one of: ${SUPPORTED_LOAD_EXTENSIONS.join(', ')}).`);
+                e.target.value = '';
+                return;
+            }
             const reader = new FileReader();
             reader.onload = (ev) => loadNewSource(ev.target.result, { fileName: file.name });
             reader.readAsText(file);
