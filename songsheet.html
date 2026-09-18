@@ -1142,43 +1142,50 @@
         body { background: #fff; }
 
         /* position: fixed repeats the legend on every printed page in
-           Chrome's print/PDF engine - no other way to repeat a side column
-           without a table's <thead>, which only repeats a top row. (This
-           was wrongly suspected as the cause of a page-1-only blank gap
-           bug - the real cause was #outputArea not being hidden for print,
-           see above - so it's safe to restore.) */
+           Chrome's print/PDF engine - no other way to repeat a strip
+           without a table's <thead>, which only repeats a top row (this is
+           effectively the same trick, just applied to a top strip instead
+           of a side column). */
         .print-legend-fixed {
             position: fixed;
             top: 0;
+            left: 0;
             right: 0;
-            width: 263px;
+            width: auto;
         }
-        /* Single-column layout (<=7 chords): the SVG diagrams scale to fill
-           whatever width their container gives them, so a 1-wide grid needs a
-           narrower container - otherwise each diagram just stretches to the
-           full 263px instead of shrinking to a single-column size. */
-        .print-legend-fixed.legend-narrow {
-            width: 140px;
+        /* Overrides the on-screen legend-grid's column layout (shared markup
+           with the on-screen legend-pane) with a single row that spans the
+           full page width - diagrams shrink to fit via flex instead of
+           wrapping into more columns, since the SVGs scale to whatever
+           width their cell gives them. print-legend-bar-height is written
+           by JS (see updatePrintLegendBarHeight) since the actual height
+           depends on how narrow the diagrams had to shrink to fit one row. */
+        .print-legend-fixed .legend-grid {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 6px;
+            justify-content: center;
+            padding: 8px 0;
+        }
+        .print-legend-fixed .legend-cell {
+            flex: 1 1 0;
+            min-width: 0;
+            max-width: 90px;
         }
         .print-body-content {
-            margin-right: 283px;
+            margin-top: var(--print-legend-bar-height, 0px);
         }
-        .print-body-content.legend-narrow {
-            margin-right: 160px;
-        }
-        .print-legend-fixed .legend-grid { gap: 6px; }
-        .print-legend-fixed .legend-grid-2 { grid-template-columns: repeat(2, 1fr); }
         .legend-pane, .sheet-pane { box-shadow: none; padding: 0; }
 
         /* Set whenever the print output shouldn't show the chord-diagram
-           column - either the Raw view (always legend-free) or the Song
+           strip - either the Raw view (always legend-free) or the Song
            Sheet view with "Include chord diagrams in printout" unchecked.
            Doesn't touch the on-screen legend-pane, only the print one. */
         .print-sheet.no-legend .print-legend-fixed {
             display: none !important;
         }
         .print-sheet.no-legend .print-body-content {
-            margin-right: 0 !important;
+            margin-top: 0 !important;
         }
 
         .print-raw-text {
@@ -1205,9 +1212,9 @@
             print-color-adjust: exact;
         }
 
-        /* Fixed print font sizes (see getPrintWrapMaxChars, which measures
-           these exact sizes to compute where lines wrap) - wrapping, not
-           shrinking, is what keeps text from running off the page edge. */
+        /* Base print font size - shrunk per-song, not wrapped, when the
+           longest line wouldn't otherwise fit the page (see
+           getPrintFontSizePt/printFontSizeOverride). */
         .sheet-lyric, .sheet-chords, .sheet-grid {
             font-size: 13pt;
         }
@@ -1259,6 +1266,7 @@
     }
 </style>
 <style id="printMarginOverride"></style>
+<style id="printFontSizeOverride"></style>
 </head>
 <body>
     <nav class="site-nav">
@@ -2395,6 +2403,44 @@
             return -1;
         }
 
+        // The natural (unwrapped) width, in "ch" units, of the widest line
+        // the print output would render - mirrors buildSongHTML's own line
+        // walk (same firstChordedLineIdx skip, same lineIdx bookkeeping)
+        // but only measures instead of building HTML. Used to shrink the
+        // print font to fit instead of word-wrapping (see getPrintFontSizePt).
+        function computeMaxPrintLineChars(song, timing, markTime) {
+            const firstChordedLineIdx = findFirstChordedLineIndex(song);
+            let lineIdx = 0;
+            let maxChars = 0;
+            for (const section of song.sections) {
+                for (const line of section.lines) {
+                    if (line.type !== 'line') continue;
+                    if (firstChordedLineIdx >= 0 && lineIdx < firstChordedLineIdx) {
+                        lineIdx++;
+                        continue;
+                    }
+                    const lt = timing.lineTimings[lineIdx];
+                    const hasChords = markTime
+                        ? (lt && lt.chordPositions.length > 0)
+                        : line.chords.length > 0;
+
+                    let width;
+                    if (hasChords && markTime && !lt.hasLyric) {
+                        const measuresSpanned = lt.measureEnd - lt.measureStart;
+                        width = Math.round(measuresSpanned * 4) * QUARTER_TICK_SPACING_CH;
+                    } else if (hasChords && !markTime) {
+                        const chordLine = buildChordLine(line.chords) || '';
+                        width = Math.max(line.lyric.length, chordLine.length);
+                    } else {
+                        width = line.lyric.length;
+                    }
+                    if (width > maxChars) maxChars = width;
+                    lineIdx++;
+                }
+            }
+            return maxChars;
+        }
+
         function buildSongHTML(song, timing, markTime, maxChars) {
             let html = '<div class="sheet-header">';
             if (song.title) html += `<div class="sheet-title">${escapeHtml(song.title)}</div>`;
@@ -2661,9 +2707,42 @@
                 ? buildLegendHTML(currentChordNames, { ...baseOpts, monochrome: true })
                 : colorHtml;
 
-            const narrow = currentChordNames.length <= 7;
-            document.querySelector('.print-legend-fixed').classList.toggle('legend-narrow', narrow);
-            document.querySelector('.print-body-content').classList.toggle('legend-narrow', narrow);
+            updatePrintLegendBarHeight(baseOpts.showIntervals);
+        }
+
+        // The print legend is a single row spanning the full page width
+        // (see .print-legend-fixed .legend-grid), so unlike the old side
+        // column its height isn't fixed - it depends on how narrow each
+        // diagram had to shrink to fit every chord in one row. Computed
+        // the same way getPrintWrapMaxChars approximates print geometry
+        // (assumed page width, no real measurement of the display:none
+        // print target), then written to a CSS custom property that
+        // .print-body-content's margin-top reads.
+        const LEGEND_CELL_MAX_WIDTH_PX = 90;
+        const LEGEND_CELL_GAP_PX = 6;
+        const LEGEND_BAR_PADDING_PX = 16;
+        // drawChordDiagram's viewBox is (width+leftMargin) x height = 210 x
+        // ~220 once the legend crops the position-label row out (see
+        // buildLegendHTML's SHIFT logic) - this is that box's height/width
+        // ratio, used to derive diagram height from whatever width a cell
+        // actually gets.
+        const LEGEND_DIAGRAM_ASPECT = 220 / 210;
+
+        function updatePrintLegendBarHeight(showIntervals) {
+            const chordCount = currentChordNames.length;
+            if (!chordCount) {
+                document.documentElement.style.setProperty('--print-legend-bar-height', '0px');
+                return;
+            }
+            const pageContentPx = (PRINT_PAGE_WIDTH_IN - PRINT_SIDE_MARGIN_IN * 2) * PRINT_CSS_DPI;
+            const cellWidth = Math.min(
+                LEGEND_CELL_MAX_WIDTH_PX,
+                (pageContentPx - LEGEND_CELL_GAP_PX * (chordCount - 1)) / chordCount
+            );
+            const diagramHeightPx = cellWidth * LEGEND_DIAGRAM_ASPECT;
+            const textAllowancePx = 17 + (showIntervals ? 13 : 0);
+            const barHeight = Math.ceil(diagramHeightPx + textAllowancePx + LEGEND_BAR_PADDING_PX);
+            document.documentElement.style.setProperty('--print-legend-bar-height', barHeight + 'px');
         }
 
         // Clicking a legend diagram that has more than one voicing cycles
@@ -2790,35 +2869,40 @@
             return Math.max(10, Math.floor(availablePx / charWidth));
         }
 
-        // Print wrap budget - the print target (#printBody) is display:none
-        // until the browser's own print pass and isn't otherwise
-        // measurable, so its available width is approximated the same way
-        // the @page rule above already approximates print margins (see that
-        // rule's comment): US Letter at Chrome's ~0.4in default side
-        // margin. Adjust PRINT_SIDE_MARGIN_IN if your printed output still
-        // clips with a non-default margin.
+        // Print page geometry - the print target (#printBody) is
+        // display:none until the browser's own print pass and isn't
+        // otherwise measurable, so its available width is approximated
+        // (see the @page rule's own comment): US Letter at Chrome's ~0.4in
+        // default side margin. Adjust PRINT_SIDE_MARGIN_IN if your printed
+        // output still clips with a non-default margin.
         const PRINT_PAGE_WIDTH_IN = 8.5;
         const PRINT_SIDE_MARGIN_IN = 0.4;
         const PRINT_CSS_DPI = 96;
-        // Extra left margin added (see printMarginOverride) when Song Sheet
-        // print excludes diagrams - must be subtracted here too, or this
-        // wrap budget overestimates available width and lines clip the
-        // right edge.
-        const PRINT_EXTRA_LEFT_MARGIN_IN = 0.75;
+        // Total left margin (see printMarginOverride) when Song Sheet print
+        // excludes diagrams - the extra beyond PRINT_SIDE_MARGIN_IN must be
+        // subtracted from available width too, or the font-size calc
+        // overestimates it and lines clip the right edge.
+        const PRINT_NO_LEGEND_MARGIN_LEFT_IN = 0.75;
+        const PRINT_BASE_FONT_PT = 13;
+        const PRINT_MIN_FONT_PT = 6;
 
-        function getPrintWrapMaxChars() {
+        // Song Sheet print never word-wraps lines (each ChordPro source
+        // line stays on one physical line) - instead, if the longest line
+        // wouldn't fit the page at the base font size, the whole print
+        // output shrinks uniformly to whatever size makes it fit, floored
+        // at PRINT_MIN_FONT_PT so it doesn't shrink to the point of being
+        // unreadable on a very long stray line.
+        function getPrintFontSizePt(maxLineChars) {
+            if (!maxLineChars) return PRINT_BASE_FONT_PT;
             const showSheet = document.getElementById('viewModeSheet').checked;
             const includeDiagrams = document.getElementById('printDiagramsCheck').checked;
-            const narrow = currentChordNames.length <= 7;
-            let legendMarginPx = 0;
-            if (showSheet && includeDiagrams && currentChordNames.length) {
-                legendMarginPx = narrow ? 160 : 283;
-            }
-            const extraMarginPx = (showSheet && !includeDiagrams) ? PRINT_EXTRA_LEFT_MARGIN_IN * PRINT_CSS_DPI : 0;
+            const extraMarginPx = (showSheet && !includeDiagrams) ? (PRINT_NO_LEGEND_MARGIN_LEFT_IN - PRINT_SIDE_MARGIN_IN) * PRINT_CSS_DPI : 0;
             const pageContentPx = (PRINT_PAGE_WIDTH_IN - PRINT_SIDE_MARGIN_IN * 2) * PRINT_CSS_DPI;
-            const availablePx = Math.max(0, pageContentPx - legendMarginPx - extraMarginPx - 8);
-            const charWidth = measureMonospaceCharWidthPx('13pt');
-            return Math.max(10, Math.floor(availablePx / charWidth));
+            const availablePx = Math.max(0, pageContentPx - extraMarginPx - 8);
+            const refCharWidthPx = measureMonospaceCharWidthPx(PRINT_BASE_FONT_PT + 'pt');
+            const naturalWidthPx = maxLineChars * refCharWidthPx;
+            if (naturalWidthPx <= availablePx) return PRINT_BASE_FONT_PT;
+            return Math.max(PRINT_MIN_FONT_PT, PRINT_BASE_FONT_PT * (availablePx / naturalWidthPx));
         }
 
         function renderOutput() {
@@ -2859,12 +2943,16 @@
             const printSheet = document.querySelector('.print-sheet');
             printSheet.classList.toggle('print-bw', isPrintBw());
             let widenLeftMargin = false;
+            let fontSizePt = PRINT_BASE_FONT_PT;
             if (showSheet) {
-                const printHTML = buildSongHTML(displaySong, timing, markTime, getPrintWrapMaxChars());
+                // maxChars=0: no word-wrapping - every source line stays on
+                // its own physical line (see getPrintFontSizePt).
+                const printHTML = buildSongHTML(displaySong, timing, markTime, 0);
                 document.getElementById('printBody').innerHTML = printHTML;
                 const includeDiagrams = document.getElementById('printDiagramsCheck').checked;
                 printSheet.classList.toggle('no-legend', !includeDiagrams);
                 widenLeftMargin = !includeDiagrams;
+                fontSizePt = getPrintFontSizePt(computeMaxPrintLineChars(displaySong, timing, markTime));
             } else {
                 const showTagged = document.getElementById('sourceViewTagged').checked;
                 const text = showTagged ? chordPlayerText : chordProText;
@@ -2872,13 +2960,16 @@
                 printSheet.classList.add('no-legend');
             }
             // Song Sheet PDF only: with diagrams excluded there's no legend
-            // column eating the right side, so the left margin is widened
+            // strip taking up its own space either way (see the
+            // print-legend-fixed CSS), so the left margin is widened just
             // to keep the text block from looking lopsided. @page margins
             // are static CSS, not reachable via a class toggle, so this
-            // rewrites a dedicated <style> tag instead (see @page above for
-            // the .4in baseline this adds .75in on top of).
+            // rewrites a dedicated <style> tag instead.
             document.getElementById('printMarginOverride').textContent = widenLeftMargin
-                ? '@page { margin-left: 1.15in; }'
+                ? `@page { margin-left: ${PRINT_NO_LEGEND_MARGIN_LEFT_IN}in; }`
+                : '';
+            document.getElementById('printFontSizeOverride').textContent = fontSizePt < PRINT_BASE_FONT_PT
+                ? `@media print { .sheet-lyric, .sheet-chords, .sheet-grid { font-size: ${fontSizePt.toFixed(2)}pt !important; } }`
                 : '';
         }
 
