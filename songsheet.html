@@ -1215,17 +1215,6 @@
             font-size: 22pt;
         }
 
-        /* Chord names (.chord-label, inside .sheet-grid, and .sheet-chords
-           in classic-annotation mode) are already font-weight:700 - but so
-           is .sheet-lyric, so on screen they're equally bold and don't
-           stand out from each other. Only the lyric row's weight is
-           dropped here, print-only, so the existing chord bold reads as
-           bold BY CONTRAST against normal-weight lyrics, the standard
-           chord-sheet convention. */
-        .sheet-lyric {
-            font-weight: 400;
-        }
-
         /* "Black & White" PDF mode (see #printColorBw) - every bit
            of ink pure #000, no grays/blue. Diagram SVGs are handled
            separately (see drawChordDiagram's monochrome param in
