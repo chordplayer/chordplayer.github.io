@@ -103,6 +103,37 @@
         display: none;
     }
 
+    /* Hide Diagrams/Hide Video - unlike .print-btn's permanently-on solid
+       fill, these reflect actual on/off state: solid blue while the panel
+       they control is showing (.active), transparent with blue text/
+       border once it's hidden - same on/off language as the segmented
+       controls' filled-vs-unfilled pill. */
+    .chordplayer-bar .toggle-btn {
+        display: flex;
+        align-items: center;
+        padding: 4px 10px;
+        border: 1px solid #1a73e8;
+        border-radius: 6px;
+        background: transparent;
+        color: #1a73e8;
+        cursor: pointer;
+        font: inherit;
+        white-space: nowrap;
+    }
+
+    .chordplayer-bar .toggle-btn.active {
+        background: #1a73e8;
+        color: #fff;
+    }
+
+    .chordplayer-bar .toggle-btn:hover {
+        background: #eaf1fd;
+    }
+
+    .chordplayer-bar .toggle-btn.active:hover {
+        background: #1558b0;
+    }
+
     /* Save / Print / Print diagrams - pinned to the right edge of the
        settings bar, away from the load/view/timing controls on the left. */
     .settings-actions {
@@ -563,48 +594,26 @@
         padding: 10px 10px 8px;
     }
 
-    .video-panel-header,
-    .legend-pane-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-    }
-
-    .legend-pane-header {
-        margin-bottom: 10px;
-    }
-
-    .minimize-btn {
-        border: none;
-        background: none;
-        color: #666;
-        font-size: 15px;
-        line-height: 1;
-        cursor: pointer;
-        padding: 2px 4px;
-    }
-
-    .minimize-btn:hover {
-        color: #1a73e8;
-    }
-
-    /* Minimized keeps the header (and, for the video panel, the YouTube
-       iframe) intact - only visually collapses the rest, so a playing
-       video keeps playing while tucked out of the way. Width shrinks to
-       fit the header alone instead of staying at full size, so the
-       collapsed panel reads as a pill rather than a mostly-empty box; for
-       .legend-pane (a real flex sibling of the sheet, not an absolutely
-       positioned overlay like .video-panel) that width collapse is also
-       what lets the lyrics pane reclaim the freed space. */
-    .video-panel.minimized,
-    .legend-pane.minimized {
-        width: auto;
-    }
-
-    .video-panel.minimized .video-panel-header ~ *,
-    .legend-pane.minimized .legend-pane-header ~ * {
+    /* Hide/show is driven entirely by the "Hide Diagrams"/"Hide Video"
+       buttons up in the settings bar, not by anything inside either
+       panel - .legend-pane has no live content once hidden, so it's a
+       plain display:none (its flex sibling .sheet-pane-wrapper is
+       flex:1, so the lyrics pane reclaims the width automatically).
+       .video-panel instead shrinks to a near-invisible sliver rather
+       than display:none, because the YouTube iframe lives inside it and
+       needs to stay actually rendered (not display:none'd) to keep
+       playing while "hidden". */
+    .legend-pane.hidden {
         display: none;
+    }
+
+    .video-panel.minimized {
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        border: none;
+        box-shadow: none;
+        overflow: hidden;
     }
 
     #youtubeUrlInput {
@@ -1323,6 +1332,8 @@
             <label class="file-btn" for="fileInput">Load Song File</label>
             <input type="file" id="fileInput">
             <button class="print-btn" id="clearSongBtn">Clear Song</button>
+            <button class="toggle-btn active" id="diagramsMinimizeBtn" type="button">Hide Diagrams</button>
+            <button class="toggle-btn active" id="videoMinimizeBtn" type="button">Hide Video</button>
             <div class="settings-actions">
                 <button class="print-btn" id="saveBtn">Save ChordPlayer</button>
                 <button class="print-btn" id="printBtn">Print / Save PDF</button>
@@ -1395,10 +1406,7 @@
 {end_of_verse}"></textarea>
                     <div class="sheet-pane" id="sheetPane" style="display:none"></div>
                     <div class="video-panel" id="videoPanel">
-                        <div class="video-panel-header">
-                            <label for="youtubeUrlInput" class="legend-title" style="margin-bottom:0">Video</label>
-                            <button type="button" class="minimize-btn" id="videoMinimizeBtn" title="Minimize">&ndash;</button>
-                        </div>
+                        <label for="youtubeUrlInput" class="legend-title" style="margin-bottom:0">Video</label>
                         <input type="text" id="youtubeUrlInput" placeholder="Paste a YouTube URL…">
                         <div class="video-embed-frame" id="videoEmbedFrame" style="display:none">
                             <div id="videoEmbedIframe"></div>
@@ -1430,10 +1438,6 @@
                     </div>
                 </div>
                 <div class="legend-pane" id="legendPaneContainer">
-                    <div class="legend-pane-header">
-                        <span class="legend-title" style="margin-bottom:0">Chords</span>
-                        <button type="button" class="minimize-btn" id="diagramsMinimizeBtn" title="Minimize">&ndash;</button>
-                    </div>
                     <label class="simplify-toggle"><input type="checkbox" id="simplifyToggle"> Simplify chords</label>
                     <div class="legend-controls">
                         <label class="simplify-toggle"><input type="checkbox" id="legendShowNotes"> Note Names</label>
@@ -5691,17 +5695,17 @@
             reader.readAsText(file);
         });
 
-        function setupMinimizeButton(btnId, panelId) {
-            document.getElementById(btnId).addEventListener('click', () => {
-                const panel = document.getElementById(panelId);
-                const minimized = panel.classList.toggle('minimized');
-                const btn = document.getElementById(btnId);
-                btn.textContent = minimized ? '▢' : '–';
-                btn.title = minimized ? 'Restore' : 'Minimize';
-            });
-        }
-        setupMinimizeButton('videoMinimizeBtn', 'videoPanel');
-        setupMinimizeButton('diagramsMinimizeBtn', 'legendPaneContainer');
+        document.getElementById('diagramsMinimizeBtn').addEventListener('click', (e) => {
+            const hidden = document.getElementById('legendPaneContainer').classList.toggle('hidden');
+            e.target.textContent = hidden ? 'Show Diagrams' : 'Hide Diagrams';
+            e.target.classList.toggle('active', !hidden);
+        });
+
+        document.getElementById('videoMinimizeBtn').addEventListener('click', (e) => {
+            const minimized = document.getElementById('videoPanel').classList.toggle('minimized');
+            e.target.textContent = minimized ? 'Show Video' : 'Hide Video';
+            e.target.classList.toggle('active', !minimized);
+        });
 
         restoreSessionState();
     </script>
