@@ -566,15 +566,6 @@
         font-size: 13px;
     }
 
-    .metronome-toggle {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 13px;
-        color: #666;
-        cursor: pointer;
-    }
-
     /* Floats independently of .video-panel, pinned to the bottom-right
        corner of .sheet-pane-wrapper (absolute, same positioning context as
        .video-panel - see its CSS) rather than the top, so it stays inside
@@ -1595,7 +1586,6 @@
             <button class="player-btn player-stack-btn" id="scrollToggleBtn">&#9654; Scroll</button>
             <label class="play-chords-toggle"><input type="checkbox" id="playChordsToggle"> Play chords</label>
             <input type="range" id="chordVolumeSlider" min="0" max="100" step="5" value="100" title="Chord volume">
-            <label class="metronome-toggle"><input type="checkbox" id="metronomeToggle" checked> Metronome</label>
             <div class="chord-duration-control">
                 <label for="strumPatternSelect">Strum</label>
                 <select id="strumPatternSelect">
@@ -3530,7 +3520,7 @@
             'timeSignatureSelect', 'chordDurationSelect', 'simplifyToggle',
             'legendShowNotes', 'legendShowIntervals', 'playChordsToggle',
             'bpmSlider', 'toneSelect', 'strumPatternSelect', 'accentContrastSlider',
-            'chordVolumeSlider', 'metronomeToggle', 'metronomeVolumeSlider',
+            'chordVolumeSlider', 'metronomeVolumeSlider',
             'videoVolumeSlider', 'videoSpeedSelect', 'youtubeUrlInput',
             'printColorColor', 'printColorBw',
         ];
@@ -4420,7 +4410,7 @@
             // instead of restarting its own 1-based cycle from tick 0.
             const beatInMeasure = ((songBeatIndex % beatsPerMeasure) + beatsPerMeasure) % beatsPerMeasure + 1;
             updateBeatDisplay(beatInMeasure, beatsPerMeasure);
-            if (document.getElementById('metronomeToggle').checked) {
+            if (metronomeOn) {
                 playMetronomeClick(beatInMeasure === 1);
             }
 
@@ -4566,14 +4556,18 @@
             updateBeatDisplay(0, getBeatsPerMeasure());
         }
 
-        // Standalone metronome (#metronomePlayBtn) - just an audible/visual
-        // click-track for getting the tempo in your ear before playing,
-        // entirely separate from the real playback clock (metronomeTick
-        // above): no scrolling, no chord scheduling/highlight, no
-        // songElapsedMeasures. Always clicks when running, regardless of
-        // the Metronome checkbox (that toggle only silences the metronome
-        // during actual Scroll playback) - the whole point of pressing this
-        // button is to hear a click.
+        // #metronomePlayBtn is the only metronome control - metronomeOn is
+        // its single on/off state, read live by metronomeTick above. While
+        // the chordplayer sheet is actually playing (isScrolling/
+        // isCountingIn/tempoPauseState), turning it on just makes that same
+        // synced tick start clicking - there's something to lock to, so no
+        // separate clock is started. Otherwise (nothing playing - includes
+        // just reading the Chordpro/Raw text with nothing to sync to) it
+        // falls back to this standalone, free-running click-track instead:
+        // no scrolling, no chord scheduling/highlight, no
+        // songElapsedMeasures, just an audible/visual beat at the current
+        // BPM to get the tempo in your ear before playing.
+        let metronomeOn = false;
         let standaloneMetronomeInterval = null;
         let standaloneBeatCount = 0;
 
@@ -4593,9 +4587,13 @@
             standaloneBeatCount = 0;
             standaloneMetronomeTick();
             standaloneMetronomeInterval = setInterval(standaloneMetronomeTick, (60 / bpm) * 1000);
+            setMetronomeButtonOn(true);
+        }
+
+        function setMetronomeButtonOn(on) {
             const btn = document.getElementById('metronomePlayBtn');
-            btn.innerHTML = '&#9724;';
-            btn.classList.add('player-btn-stop');
+            btn.innerHTML = on ? '&#9724;' : '&#9654;';
+            btn.classList.toggle('player-btn-stop', on);
         }
 
         // Same "reschedule the interval, keep the beat position" pattern as
@@ -4613,9 +4611,7 @@
                 standaloneMetronomeInterval = null;
                 updateBeatDisplay(0, getBeatsPerMeasure());
             }
-            const btn = document.getElementById('metronomePlayBtn');
-            btn.innerHTML = '&#9654;';
-            btn.classList.remove('player-btn-stop');
+            setMetronomeButtonOn(false);
         }
 
         // Click-to-resync: while the standalone metronome is running,
@@ -4793,14 +4789,23 @@
             stopAllChordAudio();
             setScrollButtonRunning(false);
             updateResumeFlashDOM();
+            // The chordplayer sheet just stopped playing - nothing left to
+            // sync the metronome to, so if it was on, fall back to its own
+            // free-running click instead of just going silent.
+            if (metronomeOn) startStandaloneMetronome();
         }
 
         document.getElementById('scrollToggleBtn').addEventListener('click', () => {
-            // Pressing Scroll always wins over the standalone metronome -
-            // stop that click-track first so playback starts clean and
-            // synced to its own count-in, instead of two metronomes
-            // ticking at once.
-            stopStandaloneMetronome();
+            // Pressing Scroll always wins over the standalone metronome's
+            // own free-running click - stop just that interval (leaving
+            // the button's on/off look as-is, driven by metronomeOn) so
+            // playback starts clean; if metronomeOn is true, metronomeTick
+            // picks up the click immediately, synced to its own count-in,
+            // instead of two clocks ticking at once.
+            if (standaloneMetronomeInterval) {
+                clearInterval(standaloneMetronomeInterval);
+                standaloneMetronomeInterval = null;
+            }
             if (isScrolling || isCountingIn || tempoPauseState) {
                 haltPlayback();
             } else {
@@ -4809,10 +4814,19 @@
         });
 
         document.getElementById('metronomePlayBtn').addEventListener('click', () => {
-            if (standaloneMetronomeInterval) {
-                stopStandaloneMetronome();
-            } else {
+            metronomeOn = !metronomeOn;
+            const playbackActive = isScrolling || isCountingIn || !!tempoPauseState;
+            if (playbackActive) {
+                // metronomeTick already reads metronomeOn live every tick -
+                // just reflect the new state in the button, no separate
+                // clock to start/stop while something's already playing.
+                setMetronomeButtonOn(metronomeOn);
+                return;
+            }
+            if (metronomeOn) {
                 startStandaloneMetronome();
+            } else {
+                stopStandaloneMetronome();
             }
         });
 
