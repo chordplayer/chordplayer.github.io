@@ -1165,6 +1165,11 @@
             min-width: 0;
             max-width: 90px;
         }
+        /* The "n/N" cyclable-voicing badge is a screen-only affordance
+           (click to cycle) - meaningless on a static printed page. */
+        .print-legend-fixed .legend-voicing-badge {
+            display: none;
+        }
         .legend-pane, .sheet-pane { box-shadow: none; padding: 0; }
 
         /* Set whenever the print output shouldn't show the chord-diagram
