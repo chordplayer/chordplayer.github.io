@@ -202,8 +202,8 @@
 
     .two-pane {
         display: flex;
+        flex-direction: column;
         gap: 12px;
-        align-items: flex-start;
     }
 
     /* Positioning context for .video-panel, which floats in its top-right
@@ -530,36 +530,27 @@
         .player-bar { display: none !important; }
     }
 
+    /* Full-width strip above the lyrics (.two-pane is a column now, and
+       this comes first in the DOM) rather than a sidebar next to them -
+       sticky to the top so it stays visible as the lyrics scroll
+       underneath it. */
     .legend-pane {
-        width: 280px;
-        flex-shrink: 0;
+        width: 100%;
         position: sticky;
-        top: 20px;
-        max-height: calc(100vh - 110px);
-        overflow-y: auto;
+        top: 0;
+        z-index: 5;
         background: #fff;
         border-radius: 8px;
         padding: 14px 12px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
 
-    @media (max-width: 899px) {
-        .two-pane { flex-direction: column; }
-        .legend-pane {
-            width: 100%;
-            max-height: none;
-            position: sticky;
-            top: 0;
-            order: -1;
-            z-index: 5;
-        }
-    }
-
-    /* On screen, the legend is always the 2-wide grid regardless of chord
-       count - the 1-vs-2 column split is a print-only space optimization. */
+    /* On screen, the legend tiles as many diagrams per row as fit (unlike
+       print's fixed 1-vs-2 column split) since the panel now spans the
+       full viewport width instead of a narrow sidebar. */
     .legend-pane .legend-grid-1,
     .legend-pane .legend-grid-2 {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
         justify-items: initial;
     }
 
@@ -2753,6 +2744,8 @@
             document.getElementById('printLegend').innerHTML = isPrintBw()
                 ? buildLegendHTML(currentChordNames, { ...baseOpts, monochrome: true })
                 : colorHtml;
+
+            updateSheetPaneHeight();
         }
 
         // Clicking a legend diagram that has more than one voicing cycles
@@ -2976,12 +2969,20 @@
         function updateSheetPaneHeight() {
             const settingsBar = document.querySelector('.chordplayer-bar');
             const twoPane = document.querySelector('.two-pane');
+            const legendPane = document.getElementById('legendPaneContainer');
             const playerBar = document.getElementById('playerBar');
             if (!settingsBar || !twoPane) return;
             const settingsRect = settingsBar.getBoundingClientRect();
             const gap = twoPane.getBoundingClientRect().top - settingsRect.bottom;
+            // .legend-pane now sits above the lyrics pane (full-width strip,
+            // not a side-by-side sidebar) - its height eats into the space
+            // left for #rawPane/#sheetPane, so it has to be subtracted here
+            // too, same as .chordplayer-bar/.player-bar.
+            const legendHeight = (legendPane && !legendPane.classList.contains('hidden'))
+                ? legendPane.getBoundingClientRect().height + 12
+                : 0;
             const playerBarHeight = playerBar.classList.contains('visible') ? playerBar.getBoundingClientRect().height : 0;
-            const available = window.innerHeight - settingsRect.height - gap - playerBarHeight;
+            const available = window.innerHeight - settingsRect.height - gap - legendHeight - playerBarHeight;
             document.documentElement.style.setProperty('--pane-height', Math.max(200, Math.round(available)) + 'px');
         }
         window.addEventListener('resize', updateSheetPaneHeight);
@@ -5699,6 +5700,7 @@
             const hidden = document.getElementById('legendPaneContainer').classList.toggle('hidden');
             e.target.textContent = hidden ? 'Show Diagrams' : 'Hide Diagrams';
             e.target.classList.toggle('active', !hidden);
+            updateSheetPaneHeight();
         });
 
         document.getElementById('videoMinimizeBtn').addEventListener('click', (e) => {
