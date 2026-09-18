@@ -180,16 +180,15 @@
         background: #eef4fe;
     }
 
-    /* Sits inside .legend-pane, directly under .simplify-toggle - shares
-       its bottom border/spacing so both read as one settings block above
-       the chord legend grid. */
+    /* All of Simplify/Note Names/Notes-Intervals sit in a single row now
+       that .legend-pane is a full-width horizontal strip rather than a
+       narrow sidebar - just a 10px gap above the diagram grid below. */
     .legend-controls {
         display: flex;
         gap: 16px;
         align-items: center;
         flex-wrap: wrap;
-        margin-bottom: 12px;
-        padding-bottom: 10px;
+        margin-bottom: 10px;
     }
 
     .legend-controls label {
@@ -530,18 +529,15 @@
         .player-bar { display: none !important; }
     }
 
-    /* Full-width strip above the lyrics (.two-pane is a column now, and
-       this comes first in the DOM) rather than a sidebar next to them -
-       sticky to the top so it stays visible as the lyrics scroll
-       underneath it. */
+    /* Full-width strip below the lyrics (.two-pane is a column now)
+       rather than a sidebar next to them. Not sticky - it sits after
+       #rawPane/#sheetPane in the page's normal scroll, not pinned above
+       them. */
     .legend-pane {
         width: 100%;
-        position: sticky;
-        top: 0;
-        z-index: 5;
         background: #fff;
         border-radius: 8px;
-        padding: 14px 12px;
+        padding: 10px 12px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
 
@@ -676,7 +672,6 @@
         font-size: 13px;
         font-weight: 600;
         cursor: pointer;
-        margin-bottom: 12px;
     }
 
     .legend-grid {
@@ -1429,8 +1424,8 @@
                     </div>
                 </div>
                 <div class="legend-pane" id="legendPaneContainer">
-                    <label class="simplify-toggle"><input type="checkbox" id="simplifyToggle"> Simplify chords</label>
                     <div class="legend-controls">
+                        <label class="simplify-toggle"><input type="checkbox" id="simplifyToggle"> Simplify chords</label>
                         <label class="simplify-toggle"><input type="checkbox" id="legendShowNotes"> Note Names</label>
                         <label class="simplify-toggle"><input type="checkbox" id="legendShowIntervals"> Notes/Intervals</label>
                     </div>
@@ -2744,8 +2739,6 @@
             document.getElementById('printLegend').innerHTML = isPrintBw()
                 ? buildLegendHTML(currentChordNames, { ...baseOpts, monochrome: true })
                 : colorHtml;
-
-            updateSheetPaneHeight();
         }
 
         // Clicking a legend diagram that has more than one voicing cycles
@@ -2969,20 +2962,12 @@
         function updateSheetPaneHeight() {
             const settingsBar = document.querySelector('.chordplayer-bar');
             const twoPane = document.querySelector('.two-pane');
-            const legendPane = document.getElementById('legendPaneContainer');
             const playerBar = document.getElementById('playerBar');
             if (!settingsBar || !twoPane) return;
             const settingsRect = settingsBar.getBoundingClientRect();
             const gap = twoPane.getBoundingClientRect().top - settingsRect.bottom;
-            // .legend-pane now sits above the lyrics pane (full-width strip,
-            // not a side-by-side sidebar) - its height eats into the space
-            // left for #rawPane/#sheetPane, so it has to be subtracted here
-            // too, same as .chordplayer-bar/.player-bar.
-            const legendHeight = (legendPane && !legendPane.classList.contains('hidden'))
-                ? legendPane.getBoundingClientRect().height + 12
-                : 0;
             const playerBarHeight = playerBar.classList.contains('visible') ? playerBar.getBoundingClientRect().height : 0;
-            const available = window.innerHeight - settingsRect.height - gap - legendHeight - playerBarHeight;
+            const available = window.innerHeight - settingsRect.height - gap - playerBarHeight;
             document.documentElement.style.setProperty('--pane-height', Math.max(200, Math.round(available)) + 'px');
         }
         window.addEventListener('resize', updateSheetPaneHeight);
@@ -5700,7 +5685,6 @@
             const hidden = document.getElementById('legendPaneContainer').classList.toggle('hidden');
             e.target.textContent = hidden ? 'Show Diagrams' : 'Hide Diagrams';
             e.target.classList.toggle('active', !hidden);
-            updateSheetPaneHeight();
         });
 
         document.getElementById('videoMinimizeBtn').addEventListener('click', (e) => {
