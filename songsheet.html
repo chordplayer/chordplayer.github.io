@@ -1209,7 +1209,7 @@
            these exact sizes to compute where lines wrap) - wrapping, not
            shrinking, is what keeps text from running off the page edge. */
         .sheet-lyric, .sheet-chords, .sheet-grid {
-            font-size: 12pt;
+            font-size: 13pt;
         }
         .sheet-title {
             font-size: 22pt;
@@ -2817,7 +2817,7 @@
             const extraMarginPx = (showSheet && !includeDiagrams) ? PRINT_EXTRA_LEFT_MARGIN_IN * PRINT_CSS_DPI : 0;
             const pageContentPx = (PRINT_PAGE_WIDTH_IN - PRINT_SIDE_MARGIN_IN * 2) * PRINT_CSS_DPI;
             const availablePx = Math.max(0, pageContentPx - legendMarginPx - extraMarginPx - 8);
-            const charWidth = measureMonospaceCharWidthPx('12pt');
+            const charWidth = measureMonospaceCharWidthPx('13pt');
             return Math.max(10, Math.floor(availablePx / charWidth));
         }
 
