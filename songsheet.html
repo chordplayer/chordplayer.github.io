@@ -1604,6 +1604,7 @@
                     <option value="alternate">Alternate Strum</option>
                     <option value="basic">Basic Strumming</option>
                     <option value="best">Best Strum</option>
+                    <option value="bass">Bass Strum</option>
                 </select>
             </div>
             <div class="chord-duration-control">
@@ -4322,8 +4323,10 @@
 
         // Strum patterns: 8 eighth-note slots per 4/4 measure, "1 + 2 + 3 + 4 +".
         // 'D' = down strum (all fretted/open strings, low to high), 'U' = up
-        // strum (highest 2-3 fretted/open strings, high to low), '-' = rest.
-        // Only defined for 4/4 - see beatsPerMeasure guard in metronomeTick.
+        // strum (highest 2-3 fretted/open strings, high to low), 'B' = bass
+        // note only (just the voicing's lowest fretted/open string - see
+        // playChord's 'bass' direction in chord-data.js), '-' = rest. Only
+        // defined for 4/4 - see beatsPerMeasure guard in metronomeTick.
         // 'single' has no grid: it's today's original behavior (one strum on
         // chord change, one re-strum per measure while a chord sustains).
         const STRUM_PATTERNS = {
@@ -4332,6 +4335,7 @@
             alternate: { slots: ['D', 'U', 'D', 'U', 'D', 'U', 'D', 'U'] },
             basic: { slots: ['D', '-', 'D', 'U', 'D', 'U', 'D', '-'] },
             best: { slots: ['D', '-', 'D', 'U', '-', 'U', 'D', 'U'] },
+            bass: { slots: ['B', '-', 'D', 'U', 'B', '-', 'D', 'U'] },
         };
 
         // Up-strum audio scheduled via setTimeout for the "+" off-beats (see
@@ -4534,14 +4538,22 @@
                             // A chord change is always audible, even if this
                             // pattern rests on this beat (e.g. Best Strum
                             // rests on beat 3) - a new chord should never
-                            // start silently.
-                            if (struckThisTick || quarterSlot === 'D') {
-                                // Accented on a chord change or the downbeat
-                                // of the measure - everything else in the
-                                // pattern strums lighter.
-                                const isAccent = struckThisTick || beatInMeasure === 1;
-                                if (window.CPL_DEBUG) console.log('[chord] STRUM down', heldChord, 'beat', beatInMeasure, 'accent', isAccent, 'at', elapsedMeasures.toFixed(4));
-                                playChordByName(heldChord, 'down', isAccent);
+                            // start silently, and always as a full strum
+                            // (even on a 'B' bass-note beat - see Bass
+                            // Strum) so the new chord is clearly heard.
+                            if (struckThisTick || quarterSlot === 'D' || quarterSlot === 'B') {
+                                // Accented on a chord change, the downbeat of
+                                // the measure, or any 'B' bass-note beat -
+                                // that last one regardless of Ghost Strum, so
+                                // the bass note always rings out at full
+                                // volume like it's the only string played,
+                                // not muted the way an off-beat strum would
+                                // be (beat 3's bass note would otherwise be
+                                // the sole non-accented beat in this pattern).
+                                const isAccent = struckThisTick || beatInMeasure === 1 || quarterSlot === 'B';
+                                const strikeDirection = (!struckThisTick && quarterSlot === 'B') ? 'bass' : 'down';
+                                if (window.CPL_DEBUG) console.log('[chord] STRUM', strikeDirection, heldChord, 'beat', beatInMeasure, 'accent', isAccent, 'at', elapsedMeasures.toFixed(4));
+                                playChordByName(heldChord, strikeDirection, isAccent);
                             }
                             if (offBeatSlot === 'U') {
                                 const halfBeatMs = (60 / bpm / 2) * 1000;

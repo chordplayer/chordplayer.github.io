@@ -2631,7 +2631,10 @@
         // as a real down strum crosses them. direction 'up': only the
         // highest 2-3 fretted/open strings (skipping any muted 'x' string in
         // that voicing), struck high to low, mimicking how an up-strum
-        // naturally catches fewer, thinner strings. `tone` selects one of
+        // naturally catches fewer, thinner strings. direction 'bass': just
+        // the single lowest fretted/open string in the voicing (its bass
+        // note) - a fingerstyle-style pluck instead of a strum, for the
+        // "1" and "3" of Bass Strum. `tone` selects one of
         // TONE_PRESETS (falls back to acoustic-warm, the original tone).
         // `accent` marks a chord-change/downbeat strum, which plays at the
         // tone's normal reference volume; every other strum plays at
@@ -2659,6 +2662,14 @@
                     const fret = frets[i];
                     if (fret === 'x' || fret === null || fret === undefined) continue;
                     stringIndices.push(i);
+                }
+            } else if (direction === 'bass') {
+                stringIndices = [];
+                for (let i = 0; i < frets.length; i++) {
+                    const fret = frets[i];
+                    if (fret === 'x' || fret === null || fret === undefined) continue;
+                    stringIndices.push(i);
+                    break;
                 }
             } else {
                 stringIndices = frets.map((fret, i) => i).filter(i => {
