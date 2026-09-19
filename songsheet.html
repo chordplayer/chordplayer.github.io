@@ -1459,6 +1459,19 @@
                 <button type="button" id="transposePlusBtn" title="Transpose up a semitone">+</button>
                 <span id="transposeOffsetLabel">+0</span>
             </div>
+            <div class="chord-duration-control">
+                <label for="capoSelect">Capo</label>
+                <select id="capoSelect">
+                    <option value="0" selected>None</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                </select>
+            </div>
             <div class="time-sig-control">
                 <label for="timeSignatureSelect">Time</label>
                 <select id="timeSignatureSelect">
@@ -3455,6 +3468,11 @@
                 const select = document.getElementById('timeSignatureSelect');
                 if ([...select.options].some(o => o.value === numerator)) select.value = numerator;
             }
+            if (currentSong.capo) {
+                const capoFret = String(parseInt(currentSong.capo, 10));
+                const select = document.getElementById('capoSelect');
+                if ([...select.options].some(o => o.value === capoFret)) select.value = capoFret;
+            }
             if (!isScrolling && !isCountingIn) updateBeatDisplay(0, getBeatsPerMeasure());
 
             songElapsedMeasures = 0;
@@ -3501,6 +3519,7 @@
             scrollStartMeasure = 0;
             transposeOffset = 0;
             updateTransposeOffsetLabel();
+            document.getElementById('capoSelect').value = '0';
 
             document.getElementById('rawPane').value = '';
             document.getElementById('sheetPane').innerHTML = '';
@@ -3536,7 +3555,7 @@
         // resumed, only settings.
         const SESSION_STORAGE_KEY = 'chordplayer.session.v1';
         const PERSISTED_CONTROL_IDS = [
-            'timeSignatureSelect', 'chordDurationSelect', 'simplifyToggle',
+            'timeSignatureSelect', 'chordDurationSelect', 'simplifyToggle', 'capoSelect',
             'legendShowNotes', 'legendShowIntervals', 'playChordsToggle',
             'bpmSlider', 'toneSelect', 'strumPatternSelect', 'accentContrastSlider',
             'chordVolumeSlider', 'metronomeVolumeSlider', 'sustainSlider',
@@ -3685,15 +3704,17 @@
         function buildPatchedSource() {
             // chordProText is already the plain/untagged buffer even
             // for a .chordplayer load (stripped at load time - see
-            // loadNewSource) - just patch time/tempo/video on top of it.
+            // loadNewSource) - just patch time/tempo/capo/video on top of it.
             let text = upsertDirective(chordProText, 'time', getTimeSignatureLabel());
             text = upsertDirective(text, 'tempo', document.getElementById('bpmSlider').value);
+            text = upsertDirective(text, 'capo', document.getElementById('capoSelect').value);
             return patchVideoUrl(text);
         }
 
         function buildPatchedTagged() {
             let text = upsertDirective(chordPlayerText, 'time', getTimeSignatureLabel());
             text = upsertDirective(text, 'tempo', document.getElementById('bpmSlider').value);
+            text = upsertDirective(text, 'capo', document.getElementById('capoSelect').value);
             return patchVideoUrl(text);
         }
 
@@ -3995,9 +4016,17 @@
             return PLAYBACK_NOTE_DURATION_MIN + getSustain() * (PLAYBACK_NOTE_DURATION_MAX - PLAYBACK_NOTE_DURATION_MIN);
         }
 
+        // Semitones a physical capo at this fret would raise the pitch -
+        // unlike Transpose, this never touches the chord names/shapes
+        // themselves (see #capoSelect and playChord's `capo` param in
+        // chord-data.js), only what actually sounds.
+        function getCapo() {
+            return parseInt(document.getElementById('capoSelect').value, 10) || 0;
+        }
+
         function playChordByName(name, direction = 'down', accent = false) {
             const voicing = chordNameIndex[name] || chordNameIndex[normalizeChordName(name)];
-            if (voicing) playChord(voicing[1], PLAYBACK_STRUM_DELAY, getNoteDuration(), direction, getSelectedTone(), accent, getNonAccentVolume(), getChordVolume(), getSustain());
+            if (voicing) playChord(voicing[1], PLAYBACK_STRUM_DELAY, getNoteDuration(), direction, getSelectedTone(), accent, getNonAccentVolume(), getChordVolume(), getSustain(), getCapo());
         }
 
         // Maps each rendered line's [measureStart, measureEnd) span to its
@@ -4568,13 +4597,28 @@
                                 const isAccent = struckThisTick || beatInMeasure === 1 || quarterSlot === 'B';
                                 const strikeDirection = quarterSlot === 'B' ? 'bass' : quarterSlot === 'M' ? 'mute' : 'down';
                                 if (window.CPL_DEBUG) console.log('[chord] STRUM', strikeDirection, heldChord, 'beat', beatInMeasure, 'accent', isAccent, 'at', elapsedMeasures.toFixed(4));
+                                // Cuts off whatever's still ringing from the
+                                // previous grid slot before starting this
+                                // one - a long Sustain setting can otherwise
+                                // pile up several overlapping quarter/eighth
+                                // strums at a fast tempo (each one's own
+                                // note outlasting the gap to the next),
+                                // which is the "can't keep up" effect at
+                                // high BPM. Grid patterns are meant to be
+                                // tightly on the beat regardless of Sustain -
+                                // only the last strum in a held chord should
+                                // actually ring out.
+                                stopAllChordAudio();
                                 playChordByName(heldChord, strikeDirection, isAccent);
                             }
                             if (offBeatSlot === 'U' || offBeatSlot === 'M') {
                                 const halfBeatMs = (60 / bpm / 2) * 1000;
                                 const offBeatDirection = offBeatSlot === 'M' ? 'mute' : 'up';
                                 if (window.CPL_DEBUG) console.log('[chord] STRUM (scheduled)', offBeatDirection, heldChord, 'beat', beatInMeasure, 'at', elapsedMeasures.toFixed(4));
-                                const t = setTimeout(() => playChordByName(heldChord, offBeatDirection), halfBeatMs);
+                                const t = setTimeout(() => {
+                                    stopAllChordAudio();
+                                    playChordByName(heldChord, offBeatDirection);
+                                }, halfBeatMs);
                                 pendingStrumTimeouts.push(t);
                             }
                         }

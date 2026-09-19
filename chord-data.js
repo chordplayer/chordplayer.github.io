@@ -2657,8 +2657,14 @@
         // palm-muted - clamped to a short, fast-decaying, darkened note
         // regardless of `noteDuration`/`sustain`, the way resting the palm
         // on the strings damps both ring and highs no matter how long
-        // you'd otherwise let a chord ring.
-        function playChord(frets, strumDelay = 0.07, noteDuration = 2.2, direction = 'down', tone = 'acoustic-warm', accent = false, nonAccentVolume = 0.25, masterVolume = 1, sustain = 0) {
+        // you'd otherwise let a chord ring. `capo` (semitones, default 0)
+        // shifts every note's pitch up uniformly - the same shape fretted
+        // higher up the neck, like a real capo raising the effective nut -
+        // without touching which strings/frets get struck. Unlike
+        // transpose (which rewrites the chord names/shapes themselves),
+        // this only changes the sounding pitch of whatever shape the sheet
+        // already specifies.
+        function playChord(frets, strumDelay = 0.07, noteDuration = 2.2, direction = 'down', tone = 'acoustic-warm', accent = false, nonAccentVolume = 0.25, masterVolume = 1, sustain = 0, capo = 0) {
             const ctx = getAudioContext();
             const now = ctx.currentTime;
             const preset = TONE_PRESETS[tone] || TONE_PRESETS['acoustic-warm'];
@@ -2710,7 +2716,7 @@
                 // timing nudge within the strum (kept well inside strumDelay
                 // so string order never audibly reorders).
                 const detuneCents = (Math.random() - 0.5) * 8;
-                const freq = standardTuningFreqs[stringIndex] * Math.pow(2, fret / 12) * Math.pow(2, detuneCents / 1200);
+                const freq = standardTuningFreqs[stringIndex] * Math.pow(2, (fret + capo) / 12) * Math.pow(2, detuneCents / 1200);
                 const timingJitter = (Math.random() - 0.5) * strumDelay * 0.3;
                 const startTime = Math.max(now, now + strumIndex * strumDelay + timingJitter);
                 const noteGain = preset.gain * accentMultiplier * Math.max(0, masterVolume) * (0.92 + Math.random() * 0.16);
