@@ -2571,11 +2571,15 @@
         // reverbMix is how much of each note is sent to the synthesized body/room
         // resonance (see getReverbImpulse) - acoustic bodies resonate more than a
         // solid electric body, so acoustic tones carry more of it.
+        // maxDecay is the ceiling `sustain` (see playChord below) interpolates
+        // toward - decay itself stays each tone's floor (sustain 0, the
+        // original pre-Sustain-slider values). Electric tones already ring
+        // longer in real life, so their ceiling sits closer to 1 too.
         const TONE_PRESETS = {
-            'acoustic-warm': { decay: 0.994, highpass: 70, lowpass: 6500, lowpassQ: 0.7, gain: 0.4, distortion: 0, reverbMix: 0.16 },
-            'acoustic-bright': { decay: 0.991, highpass: 90, lowpass: 9500, lowpassQ: 0.6, gain: 0.4, distortion: 0, reverbMix: 0.14 },
-            'electric-clean': { decay: 0.997, highpass: 120, lowpass: 4200, lowpassQ: 1.2, gain: 0.42, distortion: 0, reverbMix: 0.08 },
-            'electric-crunch': { decay: 0.997, highpass: 140, lowpass: 3800, lowpassQ: 1.4, gain: 0.38, distortion: 28, reverbMix: 0.06 },
+            'acoustic-warm': { decay: 0.994, maxDecay: 0.9985, highpass: 70, lowpass: 6500, lowpassQ: 0.7, gain: 0.4, distortion: 0, reverbMix: 0.16 },
+            'acoustic-bright': { decay: 0.991, maxDecay: 0.998, highpass: 90, lowpass: 9500, lowpassQ: 0.6, gain: 0.4, distortion: 0, reverbMix: 0.14 },
+            'electric-clean': { decay: 0.997, maxDecay: 0.9992, highpass: 120, lowpass: 4200, lowpassQ: 1.2, gain: 0.42, distortion: 0, reverbMix: 0.08 },
+            'electric-crunch': { decay: 0.997, maxDecay: 0.9992, highpass: 140, lowpass: 3800, lowpassQ: 1.4, gain: 0.38, distortion: 28, reverbMix: 0.06 },
         };
 
         // Short synthesized impulse response standing in for guitar-body/room
@@ -2636,12 +2640,17 @@
         // rather than a fixed amount, since a fixed boost read as too subtle.
         // `masterVolume` (0-1) scales the whole strum on top of that - the
         // overall "Chord Vol" slider, for balancing against the metronome/
-        // video when more than one is sounding at once.
-        function playChord(frets, strumDelay = 0.07, noteDuration = 2.2, direction = 'down', tone = 'acoustic-warm', accent = false, nonAccentVolume = 0.25, masterVolume = 1) {
+        // video when more than one is sounding at once. `sustain` (0-1,
+        // defaults to 0 - each tone's original, unmodified decay) interpolates
+        // that tone's decay toward its maxDecay - the "Sustain" slider's
+        // effect - so notes ring out longer without changing pitch/timbre.
+        function playChord(frets, strumDelay = 0.07, noteDuration = 2.2, direction = 'down', tone = 'acoustic-warm', accent = false, nonAccentVolume = 0.25, masterVolume = 1, sustain = 0) {
             const ctx = getAudioContext();
             const now = ctx.currentTime;
             const preset = TONE_PRESETS[tone] || TONE_PRESETS['acoustic-warm'];
             const accentMultiplier = accent ? 1 : Math.max(0, nonAccentVolume);
+            const sustainAmount = Math.max(0, Math.min(1, sustain));
+            const decay = preset.decay + (preset.maxDecay - preset.decay) * sustainAmount;
 
             let stringIndices;
             if (direction === 'up') {
@@ -2675,7 +2684,7 @@
                 const noteGain = preset.gain * accentMultiplier * Math.max(0, masterVolume) * (0.92 + Math.random() * 0.16);
                 strumIndex++;
 
-                const buffer = createPluckedStringBuffer(ctx, freq, noteDuration, preset.decay);
+                const buffer = createPluckedStringBuffer(ctx, freq, noteDuration, decay);
                 const source = ctx.createBufferSource();
                 source.buffer = buffer;
 

@@ -1611,6 +1611,10 @@
                 <input type="range" id="accentContrastSlider" min="10" max="100" step="5" value="25">
             </div>
             <div class="chord-duration-control">
+                <label for="sustainSlider">Sustain</label>
+                <input type="range" id="sustainSlider" min="0" max="100" step="5" value="65">
+            </div>
+            <div class="chord-duration-control">
                 <label for="toneSelect">Instrument</label>
                 <select id="toneSelect">
                     <optgroup label="Acoustic">
@@ -3530,7 +3534,7 @@
             'timeSignatureSelect', 'chordDurationSelect', 'simplifyToggle',
             'legendShowNotes', 'legendShowIntervals', 'playChordsToggle',
             'bpmSlider', 'toneSelect', 'strumPatternSelect', 'accentContrastSlider',
-            'chordVolumeSlider', 'metronomeVolumeSlider',
+            'chordVolumeSlider', 'metronomeVolumeSlider', 'sustainSlider',
             'videoVolumeSlider', 'videoSpeedSelect', 'youtubeUrlInput',
             'printColorColor', 'printColorBw',
         ];
@@ -3952,11 +3956,15 @@
         // size). Once it does start, it scrolls at normal tempo-driven speed.
         let scrollStartMeasure = 0;
 
-        // Faster strum and longer ring than the chord-finder page's default -
-        // works better for backing-track-style playback than the
-        // ring-out-clearly pacing meant for auditioning a single chord.
+        // Faster strum than the chord-finder page's default - works better
+        // for backing-track-style playback than the ring-out-clearly pacing
+        // meant for auditioning a single chord. Note duration itself now
+        // scales with the Sustain slider (see getNoteDuration) rather than
+        // being fixed - PLAYBACK_NOTE_DURATION_MIN/MAX are that range's
+        // floor/ceiling.
         const PLAYBACK_STRUM_DELAY = 0.025;
-        const PLAYBACK_NOTE_DURATION = 3.2;
+        const PLAYBACK_NOTE_DURATION_MIN = 2.5;
+        const PLAYBACK_NOTE_DURATION_MAX = 7;
 
         function getSelectedTone() {
             return document.getElementById('toneSelect').value;
@@ -3970,9 +3978,21 @@
             return parseFloat(document.getElementById('chordVolumeSlider').value) / 100;
         }
 
+        // 0 (short) - 1 (long); interpolates both the tone's own decay (see
+        // TONE_PRESETS/playChord in chord-data.js) and the note's overall
+        // buffer length below, so a longer decay tail actually has room to
+        // ring out instead of getting cut off at the old fixed 3.2s.
+        function getSustain() {
+            return parseInt(document.getElementById('sustainSlider').value, 10) / 100;
+        }
+
+        function getNoteDuration() {
+            return PLAYBACK_NOTE_DURATION_MIN + getSustain() * (PLAYBACK_NOTE_DURATION_MAX - PLAYBACK_NOTE_DURATION_MIN);
+        }
+
         function playChordByName(name, direction = 'down', accent = false) {
             const voicing = chordNameIndex[name] || chordNameIndex[normalizeChordName(name)];
-            if (voicing) playChord(voicing[1], PLAYBACK_STRUM_DELAY, PLAYBACK_NOTE_DURATION, direction, getSelectedTone(), accent, getNonAccentVolume(), getChordVolume());
+            if (voicing) playChord(voicing[1], PLAYBACK_STRUM_DELAY, getNoteDuration(), direction, getSelectedTone(), accent, getNonAccentVolume(), getChordVolume(), getSustain());
         }
 
         // Maps each rendered line's [measureStart, measureEnd) span to its
@@ -4708,7 +4728,7 @@
             clearResumeFlash();
             // Belt-and-suspenders alongside haltPlayback's own cutoff: a
             // chord struck right before Stop can still be ringing (each
-            // note lasts up to a few seconds - see PLAYBACK_NOTE_DURATION),
+            // note lasts up to a few seconds - see getNoteDuration()),
             // and letting it bleed into freshly resumed playback sounds
             // like the chord playing twice, out of time with itself.
             stopAllChordAudio();
