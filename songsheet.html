@@ -4538,9 +4538,12 @@
                             // A chord change is always audible, even if this
                             // pattern rests on this beat (e.g. Best Strum
                             // rests on beat 3) - a new chord should never
-                            // start silently, and always as a full strum
-                            // (even on a 'B' bass-note beat - see Bass
-                            // Strum) so the new chord is clearly heard.
+                            // start silently. On a 'B' bass-note beat (Bass
+                            // Strum), that still means just the bass note,
+                            // not a full strum - its root note is enough to
+                            // announce the new chord, and the 1 and the 3
+                            // should always sound identical either way,
+                            // struck-this-tick or not.
                             if (struckThisTick || quarterSlot === 'D' || quarterSlot === 'B') {
                                 // Accented on a chord change, the downbeat of
                                 // the measure, or any 'B' bass-note beat -
@@ -4551,7 +4554,7 @@
                                 // be (beat 3's bass note would otherwise be
                                 // the sole non-accented beat in this pattern).
                                 const isAccent = struckThisTick || beatInMeasure === 1 || quarterSlot === 'B';
-                                const strikeDirection = (!struckThisTick && quarterSlot === 'B') ? 'bass' : 'down';
+                                const strikeDirection = quarterSlot === 'B' ? 'bass' : 'down';
                                 if (window.CPL_DEBUG) console.log('[chord] STRUM', strikeDirection, heldChord, 'beat', beatInMeasure, 'accent', isAccent, 'at', elapsedMeasures.toFixed(4));
                                 playChordByName(heldChord, strikeDirection, isAccent);
                             }
