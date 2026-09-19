@@ -2578,6 +2578,12 @@
         const TONE_PRESETS = {
             'acoustic-warm': { decay: 0.994, maxDecay: 0.9985, highpass: 70, lowpass: 6500, lowpassQ: 0.7, gain: 0.4, distortion: 0, reverbMix: 0.16 },
             'acoustic-bright': { decay: 0.991, maxDecay: 0.998, highpass: 90, lowpass: 9500, lowpassQ: 0.6, gain: 0.4, distortion: 0, reverbMix: 0.14 },
+            // Epiphone Casino-ish: semi-hollow archtop with P90s - fuller
+            // mids and more open-body air (reverbMix) than the solid-body
+            // electrics below, but with more top-end bite and a touch of
+            // pickup grit (a light distortion, well under Crunch's) that
+            // the acoustic tones don't have.
+            'semi-hollow': { decay: 0.996, maxDecay: 0.999, highpass: 85, lowpass: 5800, lowpassQ: 0.9, gain: 0.41, distortion: 8, reverbMix: 0.13 },
             'electric-clean': { decay: 0.997, maxDecay: 0.9992, highpass: 120, lowpass: 4200, lowpassQ: 1.2, gain: 0.42, distortion: 0, reverbMix: 0.08 },
             'electric-crunch': { decay: 0.997, maxDecay: 0.9992, highpass: 140, lowpass: 3800, lowpassQ: 1.4, gain: 0.38, distortion: 28, reverbMix: 0.06 },
         };
@@ -2647,18 +2653,33 @@
         // defaults to 0 - each tone's original, unmodified decay) interpolates
         // that tone's decay toward its maxDecay - the "Sustain" slider's
         // effect - so notes ring out longer without changing pitch/timbre.
+        // direction 'mute': every fretted/open string like 'down', but
+        // palm-muted - clamped to a short, fast-decaying, darkened note
+        // regardless of `noteDuration`/`sustain`, the way resting the palm
+        // on the strings damps both ring and highs no matter how long
+        // you'd otherwise let a chord ring.
         function playChord(frets, strumDelay = 0.07, noteDuration = 2.2, direction = 'down', tone = 'acoustic-warm', accent = false, nonAccentVolume = 0.25, masterVolume = 1, sustain = 0) {
             const ctx = getAudioContext();
             const now = ctx.currentTime;
             const preset = TONE_PRESETS[tone] || TONE_PRESETS['acoustic-warm'];
             const accentMultiplier = accent ? 1 : Math.max(0, nonAccentVolume);
-            const sustainAmount = Math.max(0, Math.min(1, sustain));
-            const decay = preset.decay + (preset.maxDecay - preset.decay) * sustainAmount;
+            const isMuted = direction === 'mute';
+            const sustainAmount = isMuted ? 0 : Math.max(0, Math.min(1, sustain));
+            const decay = isMuted ? 0.86 : preset.decay + (preset.maxDecay - preset.decay) * sustainAmount;
+            if (isMuted) noteDuration = Math.min(noteDuration, 0.18);
+            const effectiveLowpass = isMuted ? Math.min(preset.lowpass, 1800) : preset.lowpass;
 
             let stringIndices;
             if (direction === 'up') {
+                // String 1 (highest pitch) first, then 2, then 3 - the order
+                // an upstroke actually crosses them, starting from the thin
+                // strings and moving toward the thick ones. 2 or 3 strings,
+                // chosen at random each strum, the way a real up-strum
+                // doesn't catch a perfectly consistent number of strings
+                // strum to strum.
                 stringIndices = [];
-                for (let i = frets.length - 1; i >= 0 && stringIndices.length < 3; i--) {
+                const upStrumStringCount = Math.random() < 0.5 ? 2 : 3;
+                for (let i = frets.length - 1; i >= 0 && stringIndices.length < upStrumStringCount; i--) {
                     const fret = frets[i];
                     if (fret === 'x' || fret === null || fret === undefined) continue;
                     stringIndices.push(i);
@@ -2706,7 +2727,7 @@
 
                 const lowpass = ctx.createBiquadFilter();
                 lowpass.type = 'lowpass';
-                lowpass.frequency.value = preset.lowpass;
+                lowpass.frequency.value = effectiveLowpass;
                 lowpass.Q.value = preset.lowpassQ;
 
                 const gain = ctx.createGain();

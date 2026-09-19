@@ -1605,6 +1605,7 @@
                     <option value="basic">Basic Strumming</option>
                     <option value="best">Best Strum</option>
                     <option value="bass">Bass Strum</option>
+                    <option value="palmMute">Palm Mute</option>
                 </select>
             </div>
             <div class="chord-duration-control">
@@ -1619,8 +1620,11 @@
                 <label for="toneSelect">Instrument</label>
                 <select id="toneSelect">
                     <optgroup label="Acoustic">
-                        <option value="acoustic-warm" selected>Warm</option>
+                        <option value="acoustic-warm">Warm</option>
                         <option value="acoustic-bright">Bright</option>
+                    </optgroup>
+                    <optgroup label="Semi-Hollow">
+                        <option value="semi-hollow" selected>Casino</option>
                     </optgroup>
                     <optgroup label="Electric">
                         <option value="electric-clean">Clean</option>
@@ -4325,17 +4329,20 @@
         // 'D' = down strum (all fretted/open strings, low to high), 'U' = up
         // strum (highest 2-3 fretted/open strings, high to low), 'B' = bass
         // note only (just the voicing's lowest fretted/open string - see
-        // playChord's 'bass' direction in chord-data.js), '-' = rest. Only
-        // defined for 4/4 - see beatsPerMeasure guard in metronomeTick.
-        // 'single' has no grid: it's today's original behavior (one strum on
-        // chord change, one re-strum per measure while a chord sustains).
+        // playChord's 'bass' direction in chord-data.js), 'M' = palm-muted
+        // down strum (every fretted/open string, but short/damped - see
+        // playChord's 'mute' direction), '-' = rest. Only defined for 4/4 -
+        // see beatsPerMeasure guard in metronomeTick. 'single' has no grid:
+        // it's today's original behavior (one strum on chord change, one
+        // re-strum per measure while a chord sustains).
         const STRUM_PATTERNS = {
             single: { slots: null },
             quarter: { slots: ['D', '-', 'D', '-', 'D', '-', 'D', '-'] },
             alternate: { slots: ['D', 'U', 'D', 'U', 'D', 'U', 'D', 'U'] },
-            basic: { slots: ['D', '-', 'D', 'U', 'D', 'U', 'D', '-'] },
+            basic: { slots: ['D', '-', 'D', 'U', 'D', '-', 'D', 'U'] },
             best: { slots: ['D', '-', 'D', 'U', '-', 'U', 'D', 'U'] },
             bass: { slots: ['B', '-', 'D', 'U', 'B', '-', 'D', 'U'] },
+            palmMute: { slots: ['M', 'M', 'M', 'M', 'M', 'M', 'M', 'M'] },
         };
 
         // Up-strum audio scheduled via setTimeout for the "+" off-beats (see
@@ -4543,8 +4550,10 @@
                             // not a full strum - its root note is enough to
                             // announce the new chord, and the 1 and the 3
                             // should always sound identical either way,
-                            // struck-this-tick or not.
-                            if (struckThisTick || quarterSlot === 'D' || quarterSlot === 'B') {
+                            // struck-this-tick or not. Same idea for 'M'
+                            // (Palm Mute) - a chord change stays muted too,
+                            // so it doesn't suddenly ring out mid-pattern.
+                            if (struckThisTick || quarterSlot === 'D' || quarterSlot === 'B' || quarterSlot === 'M') {
                                 // Accented on a chord change, the downbeat of
                                 // the measure, or any 'B' bass-note beat -
                                 // that last one regardless of Ghost Strum, so
@@ -4553,15 +4562,19 @@
                                 // not muted the way an off-beat strum would
                                 // be (beat 3's bass note would otherwise be
                                 // the sole non-accented beat in this pattern).
+                                // 'M' gets no such override - Palm Mute wants
+                                // the downbeat/off-beat dynamic contrast a
+                                // real chugged rhythm part has.
                                 const isAccent = struckThisTick || beatInMeasure === 1 || quarterSlot === 'B';
-                                const strikeDirection = quarterSlot === 'B' ? 'bass' : 'down';
+                                const strikeDirection = quarterSlot === 'B' ? 'bass' : quarterSlot === 'M' ? 'mute' : 'down';
                                 if (window.CPL_DEBUG) console.log('[chord] STRUM', strikeDirection, heldChord, 'beat', beatInMeasure, 'accent', isAccent, 'at', elapsedMeasures.toFixed(4));
                                 playChordByName(heldChord, strikeDirection, isAccent);
                             }
-                            if (offBeatSlot === 'U') {
+                            if (offBeatSlot === 'U' || offBeatSlot === 'M') {
                                 const halfBeatMs = (60 / bpm / 2) * 1000;
-                                if (window.CPL_DEBUG) console.log('[chord] STRUM up (scheduled)', heldChord, 'beat', beatInMeasure, 'at', elapsedMeasures.toFixed(4));
-                                const t = setTimeout(() => playChordByName(heldChord, 'up'), halfBeatMs);
+                                const offBeatDirection = offBeatSlot === 'M' ? 'mute' : 'up';
+                                if (window.CPL_DEBUG) console.log('[chord] STRUM (scheduled)', offBeatDirection, heldChord, 'beat', beatInMeasure, 'at', elapsedMeasures.toFixed(4));
+                                const t = setTimeout(() => playChordByName(heldChord, offBeatDirection), halfBeatMs);
                                 pendingStrumTimeouts.push(t);
                             }
                         }
