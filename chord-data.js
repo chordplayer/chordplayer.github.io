@@ -2698,6 +2698,16 @@
                     stringIndices.push(i);
                     break;
                 }
+            } else if (direction === 'mute') {
+                // Only the lowest 2 strings in the voicing - real palm
+                // muting is played low-string/power-chord style, not a
+                // full 6-string chunk.
+                stringIndices = [];
+                for (let i = 0; i < frets.length && stringIndices.length < 2; i++) {
+                    const fret = frets[i];
+                    if (fret === 'x' || fret === null || fret === undefined) continue;
+                    stringIndices.push(i);
+                }
             } else {
                 stringIndices = frets.map((fret, i) => i).filter(i => {
                     const fret = frets[i];

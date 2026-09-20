@@ -229,10 +229,6 @@
         border: none;
     }
 
-    #rawPane[readonly] {
-        cursor: default;
-    }
-
     #rawPane.drag-over {
         outline: 2px solid #1a73e8;
         background: #eef4fe;
@@ -3123,22 +3119,23 @@
         window.addEventListener('resize', updateSheetPaneHeight);
         updateSheetPaneHeight();
 
-        // Shows/locks #rawPane per the sourceView toggle, and picks
-        // which of #rawPane (Raw) / #sheetPane (Songsheet) is
-        // visible - the two sit in the same slot in .two-pane and are
-        // simply toggled against each other - without touching either
-        // in-memory buffer. Play-along chord audio requires an actual
-        // tagged/edited source (raw source's timing is just the
-        // fixed-duration default, not a meaningful "performance"), so the
-        // toggle is only enabled while "ChordPlayer" is selected -
-        // clicking a chord's own duration in the sheet is gated the same
-        // way (see wireChordLabelClicks).
+        // Shows #rawPane per the sourceView toggle, and picks which of
+        // #rawPane (Raw) / #sheetPane (Songsheet) is visible - the two sit
+        // in the same slot in .two-pane and are simply toggled against
+        // each other. Both the Chordpro and ChordPlayer views of #rawPane
+        // are editable; editing Chordpro re-tags the ChordPlayer buffer
+        // from the edited source on blur (see the rawPaneEl blur handler),
+        // which is why #rawPane is never readOnly. Play-along chord audio
+        // requires an actual tagged/edited source (raw source's timing is
+        // just the fixed-duration default, not a meaningful
+        // "performance"), so the toggle is only enabled while
+        // "ChordPlayer" is selected - clicking a chord's own duration in
+        // the sheet is gated the same way (see wireChordLabelClicks).
         function syncPaneDisplay() {
             const showTagged = document.getElementById('sourceViewTagged').checked;
             const showSheet = sourceLoaded && document.getElementById('viewModeSheet').checked;
             const box = document.getElementById('rawPane');
             box.value = showTagged ? chordPlayerText : chordProText;
-            box.readOnly = sourceLoaded && !showTagged;
             box.style.display = showSheet ? 'none' : '';
             document.getElementById('sheetPane').style.display = showSheet ? '' : 'none';
             document.getElementById('printDiagramsCheck').disabled = !showSheet;
@@ -3192,6 +3189,26 @@
             chordPlayerText = buildTaggedChordPro(song, timing);
             tagsDirty = false;
             document.getElementById('sourceViewTagged').checked = true;
+            renderActive();
+        }
+
+        // Same re-tag as regenerateTaggedFromSource, but triggered by
+        // editing the Chordpro pane directly (see the rawPaneEl blur
+        // handler) rather than the "Chord duration" dropdown - so it
+        // stays on the Chordpro view instead of switching to ChordPlayer,
+        // and reads chordProText fresh rather than assuming it's
+        // unchanged. Same confirm-before-discard guard for unsaved tagged
+        // edits; declining leaves chordPlayerText stale until the next
+        // edit is accepted or discarded.
+        function reTagFromEditedSource() {
+            if (tagsDirty && !confirm('You have unsaved edits in "With Time Tags" that will be lost. Re-tag from the edited source anyway?')) {
+                return;
+            }
+            const song = parseChordPro(chordProText);
+            const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
+            const timing = computeMeasureTiming(song, chordDurationMeasures);
+            chordPlayerText = buildTaggedChordPro(song, timing);
+            tagsDirty = false;
             renderActive();
         }
 
@@ -5170,20 +5187,30 @@
         document.getElementById('legendShowNotes').addEventListener('change', renderLegend);
         document.getElementById('legendShowIntervals').addEventListener('change', renderLegend);
 
-        // Typing is only possible while "With Time Tags" is selected
-        // (Source is read-only once loaded - see syncPaneDisplay); sync
-        // keystrokes into the in-memory tagged buffer as they happen, but
-        // only re-render the sheet on blur so the sheet doesn't jump around
-        // mid-edit.
+        // Typing is possible in both Chordpro and ChordPlayer views; sync
+        // keystrokes into whichever in-memory buffer is currently shown as
+        // they happen, but only re-render (or, for Chordpro, re-tag) on
+        // blur so the sheet doesn't jump around mid-edit. Editing Chordpro
+        // re-tags the ChordPlayer buffer from the edited source (see
+        // reTagFromEditedSource) rather than just re-rendering, since the
+        // sheet is always drawn from the tagged buffer.
         const rawPaneEl = document.getElementById('rawPane');
         rawPaneEl.addEventListener('input', () => {
-            if (!sourceLoaded || rawPaneEl.readOnly) return;
-            chordPlayerText = rawPaneEl.value;
-            tagsDirty = true;
+            if (!sourceLoaded) return;
+            if (document.getElementById('sourceViewSource').checked) {
+                chordProText = rawPaneEl.value;
+            } else {
+                chordPlayerText = rawPaneEl.value;
+                tagsDirty = true;
+            }
         });
         rawPaneEl.addEventListener('blur', () => {
-            if (!sourceLoaded || document.getElementById('sourceViewSource').checked) return;
-            renderActive();
+            if (!sourceLoaded) return;
+            if (document.getElementById('sourceViewSource').checked) {
+                reTagFromEditedSource();
+            } else {
+                renderActive();
+            }
         });
 
         // --- Click-to-adjust chord duration ---
