@@ -1071,12 +1071,6 @@
         opacity: 0.85;
     }
 
-    /* Alt/Option-drag (Source view only) duplicates instead of moving -
-       see duplicateSourceChordAt - swap the cursor to signal that. */
-    #sheetPane.source-editable .chord-label.copying {
-        cursor: copy;
-    }
-
     /* The chord currently sounding during Scroll/Play Chords playback, and
        the chord that will resume next (below) share this same look - scale
        rather than resize the font so it doesn't reflow the grid's
@@ -3115,6 +3109,11 @@
             // ensureScrollSpacer) and reset here on every re-render.
             document.getElementById('sheetPane').innerHTML = songHTML + '<div id="scrollSpacer"></div>';
             activeChordEl = null;
+            // The just-rebuilt DOM makes any previously-hovered chord-label
+            // stale (mouseleave isn't guaranteed to fire for an element
+            // removed out from under the pointer) - a fresh pointerover
+            // re-sets it if the mouse is still actually over a chord.
+            hoveredSourceChord = null;
             updateResumeFlashDOM();
             renderLegend();
             updatePrintOutput(displaySong, timing, markTime);
@@ -5297,6 +5296,14 @@
         // 'source' (Chordpro view - plain [chord] position, no duration).
         let durationPopupState = null; // { lineIdx, chordIdx, mode }
 
+        // Cmd/Ctrl+C copies whichever Source-view chord is currently
+        // hovered (the same grab-cursor chord you'd otherwise click or
+        // drag) into this in-app clipboard - no need to click it open
+        // first. Shift-click-to-insert elsewhere then pastes this name
+        // instead of the default "C" - see the sheetPane click handler.
+        let hoveredSourceChord = null; // { lineIdx, chordIdx }
+        let copiedSourceChordName = null;
+
         function collectSongLines(song) {
             const lines = [];
             for (const section of song.sections) {
@@ -5477,22 +5484,6 @@
             chord.index = newIndex;
             commitSourceLine(song, line);
             return true;
-        }
-
-        // Alt/Option-drag equivalent of nudgeSourceChordPosition - same
-        // pixel-delta-to-character-delta math, but leaves the dragged
-        // chord where it started and inserts a same-named copy at the
-        // drop point instead (see insertSourceChordAt).
-        function duplicateSourceChordAt(lineIdx, chordIdx, deltaPx) {
-            const found = findSourceChord(lineIdx, chordIdx);
-            if (!found) return false;
-            const pxPerChar = measureMonospaceCharWidth();
-            if (!pxPerChar) return false;
-            const deltaChars = Math.round(deltaPx / pxPerChar);
-            if (!deltaChars) return false;
-            const { line, chord } = found;
-            const newIndex = Math.max(0, Math.min(chord.index + deltaChars, line.lyric.length));
-            return insertSourceChordAt(lineIdx, newIndex, chord.chord) != null;
         }
 
         // Resolves a click's pixel position to a character offset within a
@@ -6077,11 +6068,7 @@
         // Drag-to-reorder state for the chord-label pointer handlers below.
         // A real drag vs. a plain click (which opens the duration popup) is
         // disambiguated by a small movement threshold - see pointermove.
-        // isCopy (Source view only - see duplicateSourceChordAt) is decided
-        // at pointerdown from whether Option/Alt was already held, matching
-        // the standard "modifier-drag duplicates" convention rather than
-        // requiring a separate copy/paste clipboard.
-        let chordDragState = null; // { lineIdx, chordIdx, mode, isCopy, pointerId, startX, moved, el }
+        let chordDragState = null; // { lineIdx, chordIdx, mode, pointerId, startX, moved, el }
         let suppressNextChordClick = false;
 
         document.getElementById('sheetPane').addEventListener('pointerdown', (e) => {
@@ -6091,8 +6078,7 @@
             const chordIdx = parseInt(target.dataset.chordIdx, 10);
             if (isNaN(lineIdx) || isNaN(chordIdx)) return;
             const mode = document.getElementById('sourceViewTagged').checked ? 'tagged' : 'source';
-            const isCopy = mode === 'source' && e.altKey;
-            chordDragState = { lineIdx, chordIdx, mode, isCopy, pointerId: e.pointerId, startX: e.clientX, moved: false, el: target };
+            chordDragState = { lineIdx, chordIdx, mode, pointerId: e.pointerId, startX: e.clientX, moved: false, el: target };
         });
 
         document.getElementById('sheetPane').addEventListener('pointermove', (e) => {
@@ -6101,7 +6087,6 @@
             if (!chordDragState.moved && Math.abs(dx) > 4) {
                 chordDragState.moved = true;
                 chordDragState.el.classList.add('dragging');
-                if (chordDragState.isCopy) chordDragState.el.classList.add('copying');
                 chordDragState.el.setPointerCapture(chordDragState.pointerId);
             }
             if (chordDragState.moved) {
@@ -6109,11 +6094,15 @@
             }
         });
 
+        // Not tracked while a pointer capture is active (dragging steals
+        // native mouseover/pointerover on most browsers anyway), so a chord
+        // being dragged never gets confused with the hover-to-copy state -
+        // see the pointerover/pointerout listeners below.
         function endChordDrag(e) {
             if (!chordDragState || e.pointerId !== chordDragState.pointerId) return;
-            const { lineIdx, chordIdx, mode, isCopy, moved, el, startX } = chordDragState;
+            const { lineIdx, chordIdx, mode, moved, el, startX } = chordDragState;
             el.style.transform = '';
-            el.classList.remove('dragging', 'copying');
+            el.classList.remove('dragging');
             if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
             chordDragState = null;
             if (moved) {
@@ -6121,8 +6110,6 @@
                 if (mode === 'tagged') {
                     const scale = estimateLocalPixelsPerMeasure(lineIdx, chordIdx);
                     if (scale) nudgeChordTiming(lineIdx, chordIdx, (e.clientX - startX) / scale);
-                } else if (isCopy) {
-                    duplicateSourceChordAt(lineIdx, chordIdx, e.clientX - startX);
                 } else {
                     nudgeSourceChordPosition(lineIdx, chordIdx, e.clientX - startX);
                 }
@@ -6130,6 +6117,35 @@
         }
         document.getElementById('sheetPane').addEventListener('pointerup', endChordDrag);
         document.getElementById('sheetPane').addEventListener('pointercancel', endChordDrag);
+
+        // Hover-to-copy: no need to click a chord open first - just rest
+        // the pointer on it (the same grab-cursor chord you'd click or
+        // drag) and press Cmd/Ctrl+C. Source view only; the tagged
+        // ChordPlayer view has no analogous copy feature.
+        document.getElementById('sheetPane').addEventListener('pointerover', (e) => {
+            if (document.getElementById('sourceViewTagged').checked) return;
+            const target = e.target.closest('.chord-label');
+            if (!target) { hoveredSourceChord = null; return; }
+            const lineIdx = parseInt(target.dataset.lineIdx, 10);
+            const chordIdx = parseInt(target.dataset.chordIdx, 10);
+            if (isNaN(lineIdx) || isNaN(chordIdx)) return;
+            hoveredSourceChord = { lineIdx, chordIdx };
+        });
+        document.getElementById('sheetPane').addEventListener('pointerout', (e) => {
+            if (e.target.closest('.chord-label') && !e.relatedTarget?.closest?.('.chord-label')) {
+                hoveredSourceChord = null;
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'c') return;
+            if (!hoveredSourceChord) return;
+            const tag = document.activeElement && document.activeElement.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA') return; // let normal text copy through
+            const found = findSourceChord(hoveredSourceChord.lineIdx, hoveredSourceChord.chordIdx);
+            if (!found) return;
+            copiedSourceChordName = found.chord.chord;
+        });
 
         document.getElementById('sheetPane').addEventListener('click', (e) => {
             if (suppressNextChordClick) { suppressNextChordClick = false; return; }
@@ -6183,7 +6199,7 @@
                 if (offset == null) return;
                 const wrapStart = parseInt(lineEl.dataset.wrapStart || '0', 10);
                 e.stopPropagation();
-                const newChordIdx = insertSourceChordAt(lineIdx, wrapStart + offset, 'C');
+                const newChordIdx = insertSourceChordAt(lineIdx, wrapStart + offset, copiedSourceChordName || 'C');
                 if (newChordIdx == null) return;
                 const newTarget = document.querySelector(`#sheetPane .chord-label[data-line-idx="${lineIdx}"][data-chord-idx="${newChordIdx}"]`);
                 if (newTarget) {
