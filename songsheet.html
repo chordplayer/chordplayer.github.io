@@ -998,11 +998,32 @@
         height: 16px;
     }
 
+    /* Classic (Chordpro/Source) sheet view's own lightweight chord row -
+       same "ch"-positioned .chord-label spans as the tagged grid above, but
+       with no measure ticks/numbers above it (there's no timing data to
+       show), so it only needs enough height for one row of chord labels. */
+    .sheet-grid-classic {
+        position: relative;
+        height: 19px;
+        font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+        font-size: 15px;
+    }
+    .sheet-grid-classic .sheet-chords-grid {
+        top: 0;
+    }
+
     /* Shift-clicking the tick-marks row inserts a new chord there - see
        insertChordAt - so the "+" affordance only shows there, not over the
        chord names below, letting a click land precisely on a tick. */
     #sheetPane.tags-editable .sheet-ticks {
         cursor: copy;
+    }
+
+    /* Shift-clicking the lyric text itself inserts a source chord at that
+       exact character - see resolveLyricCharIndex/insertSourceChordAt -
+       since the Source view has no separate tick row to click. */
+    #sheetPane.source-editable .sheet-lyric {
+        cursor: text;
     }
 
     .chord-label {
@@ -1027,20 +1048,23 @@
        "ChordPlayer" - #sheetPane gets this class then (see syncPaneDisplay).
        Also draggable there (left/right along its own line) to reorder it -
        see wireChordLabelClicks/moveChordWithinLine. */
-    #sheetPane.tags-editable .chord-label {
+    #sheetPane.tags-editable .chord-label,
+    #sheetPane.source-editable .chord-label {
         cursor: grab;
         border-radius: 3px;
         touch-action: none;
     }
 
-    #sheetPane.tags-editable .chord-label:hover {
+    #sheetPane.tags-editable .chord-label:hover,
+    #sheetPane.source-editable .chord-label:hover {
         background: #e8f0fe;
     }
 
     /* Actively being dragged (see the pointer handlers) - lifted above its
        siblings and following the pointer horizontally via a live
        translateX, so dropping it shows exactly where it'll land. */
-    #sheetPane.tags-editable .chord-label.dragging {
+    #sheetPane.tags-editable .chord-label.dragging,
+    #sheetPane.source-editable .chord-label.dragging {
         cursor: grabbing;
         background: #e8f0fe;
         z-index: 5;
@@ -1353,7 +1377,7 @@
         /* Base print font size - shrunk per-song, not wrapped, when the
            longest line wouldn't otherwise fit the page (see
            getPrintFontSizePt/printFontSizeOverride). */
-        .sheet-lyric, .sheet-chords, .sheet-grid {
+        .sheet-lyric, .sheet-chords, .sheet-grid, .sheet-grid-classic {
             font-size: 13pt;
         }
         .sheet-title {
@@ -2531,20 +2555,35 @@
         // trailing instrumental chord run past the end of the lyric text
         // is included by padding the lyric out to the chord line's length
         // before computing wrap points.
+        // Classic (Chordpro/Source) view's per-line render - chord-label
+        // spans positioned by literal lyric character offset ("ch" units,
+        // same coordinate space buildLyricAnchoredGridHTML's tagged-view
+        // spans use), rather than a flat text row (buildChordLine), so
+        // every chord here is individually addressable by data-line-idx/
+        // data-chord-idx for click/shift-click/drag editing - see
+        // wireChordLabelClicks-equivalent handlers below (the sheetPane
+        // click/pointerdown listeners, branched on sourceViewTagged).
+        // data-wrap-start records each physical row's own start offset
+        // into the FULL (unwrapped) lyric, so a click resolved via
+        // resolveLyricCharIndex can be translated back to the real
+        // character index even when a long line has been word-wrapped
+        // into several rows for the screen.
         function buildClassicLineHTML(line, lineIdx, maxChars) {
-            const chordLine = buildChordLine(line.chords) || '';
-            const textLen = Math.max(line.lyric.length, chordLine.length);
-            const paddedLyric = line.lyric.length < textLen
-                ? line.lyric + ' '.repeat(textLen - line.lyric.length)
-                : line.lyric;
-            const ranges = wrapTextRanges(paddedLyric, maxChars);
+            const ranges = wrapTextRanges(line.lyric, maxChars);
+            const sorted = [...line.chords].sort((a, b) => a.index - b.index);
+            const chordBuckets = bucketByRange(sorted, ranges, (c) => c.index);
 
             let out = '';
-            ranges.forEach((range) => {
-                const segLyric = line.lyric.slice(range.start, Math.min(range.end, line.lyric.length));
-                const segChords = chordLine.slice(range.start, range.end).replace(/\s+$/, '');
-                let html = `<div class="sheet-line" data-line-idx="${lineIdx}">`;
-                if (segChords) html += `<div class="sheet-chords">${escapeHtml(segChords)}</div>`;
+            ranges.forEach((range, segIdx) => {
+                const segLyric = line.lyric.slice(range.start, range.end);
+                let html = `<div class="sheet-line" data-line-idx="${lineIdx}" data-wrap-start="${range.start}">`;
+                html += '<div class="sheet-grid-classic">';
+                html += '<div class="sheet-chords-grid">';
+                for (const { item: chord, origIdx, localPos } of chordBuckets[segIdx]) {
+                    html += `<span class="chord-label" data-line-idx="${lineIdx}" data-chord-idx="${origIdx}" style="left:${localPos}ch">${escapeHtml(chord.chord)}</span>`;
+                }
+                html += '</div>';
+                html += '</div>';
                 html += `<div class="sheet-lyric">${segLyric ? escapeHtml(segLyric) : '&nbsp;'}</div>`;
                 html += '</div>';
                 out += html;
@@ -3150,7 +3189,8 @@
             if (!showTagged) playChords.checked = false;
 
             document.getElementById('sheetPane').classList.toggle('tags-editable', showTagged);
-            if (!showTagged) hideDurationPopup();
+            document.getElementById('sheetPane').classList.toggle('source-editable', !showTagged);
+            hideDurationPopup();
         }
 
         // Parses and renders whichever buffer the sourceView toggle currently
@@ -5223,7 +5263,9 @@
         // (the "Auto chord duration" setting) rather than an arbitrary
         // default, so the very first click doesn't jump its timing.
         const CHORD_DURATION_STEP = 0.25;
-        let durationPopupState = null; // { lineIdx, chordIdx }
+        // mode: 'tagged' (ChordPlayer view - has a -/+ duration stepper) or
+        // 'source' (Chordpro view - plain [chord] position, no duration).
+        let durationPopupState = null; // { lineIdx, chordIdx, mode }
 
         function collectSongLines(song) {
             const lines = [];
@@ -5267,6 +5309,172 @@
             chordPlayerText = buildTaggedChordPro(song, timing);
             tagsDirty = true;
             renderActive();
+        }
+
+        // --- Chordpro (Source) view chord editing ---
+        //
+        // Same click/shift-click/drag gestures as the ChordPlayer view's
+        // chord-label editing above, but operating directly on chordProText
+        // instead of chordPlayerText. The plain buffer has no {x_cpl_m:}
+        // duration tags and no parse -> mutate -> buildTaggedChordPro round
+        // trip of its own (see transposeChordProText's comment), so a chord
+        // here is just its [name] and its lyric character position - no
+        // duration concept at all.
+
+        // Same addressing as findTaggedChordLine/findTaggedChord, but
+        // re-parses chordProText instead.
+        function findSourceChordLine(lineIdx) {
+            const song = parseChordPro(chordProText);
+            const line = collectSongLines(song)[lineIdx];
+            if (!line) return null;
+            return { song, line };
+        }
+
+        function findSourceChord(lineIdx, chordIdx) {
+            const found = findSourceChordLine(lineIdx);
+            if (!found) return null;
+            const chords = [...found.line.chords].sort((a, b) => a.index - b.index);
+            const chord = chords[chordIdx];
+            if (!chord) return null;
+            return { song: found.song, line: found.line, chord };
+        }
+
+        // Rebuilds one raw source line's text from its own lyric + chords
+        // (interleaving each [chord] bracket back in at its own index),
+        // splices it back into chordProText at that line's original raw-
+        // text position, then re-tags the ChordPlayer buffer from it
+        // immediately (rather than waiting for the #rawPane blur handler,
+        // since these edits happen in the rendered Sheet view, which never
+        // blurs) so both views stay in sync live.
+        function commitSourceLine(song, line) {
+            const sorted = [...line.chords].sort((a, b) => a.index - b.index);
+            let rebuilt = '';
+            let cursor = 0;
+            sorted.forEach((c) => {
+                rebuilt += line.lyric.slice(cursor, c.index);
+                rebuilt += `[${c.chord}]`;
+                cursor = c.index;
+            });
+            rebuilt += line.lyric.slice(cursor);
+            const lines = chordProText.split(/\r?\n/);
+            lines[line._rawLine] = rebuilt;
+            chordProText = lines.join('\n');
+            reTagFromEditedSource();
+        }
+
+        // Renames the chord at one position, same stripping/trimming rule
+        // as renameChordAt. Unlike the tagged buffer (where an emptied name
+        // deliberately blanks the chord to silence a measure), a plain
+        // ChordPro bracket has no duration to preserve, so emptying the
+        // name here just deletes the chord outright.
+        function renameSourceChordAt(lineIdx, chordIdx, rawName) {
+            const name = rawName.replace(/[[\]{}]/g, '').trim();
+            if (!name) {
+                deleteSourceChordAt(lineIdx, chordIdx);
+                return null;
+            }
+            const found = findSourceChord(lineIdx, chordIdx);
+            if (!found) return null;
+            const { song, line, chord } = found;
+            if (chord.chord === name) return name;
+            chord.chord = name;
+            commitSourceLine(song, line);
+            return name;
+        }
+
+        function deleteSourceChordAt(lineIdx, chordIdx) {
+            const found = findSourceChord(lineIdx, chordIdx);
+            if (!found) return false;
+            const { song, line, chord } = found;
+            line.chords = line.chords.filter((c) => c !== chord);
+            commitSourceLine(song, line);
+            return true;
+        }
+
+        // Inserts a brand-new "C" chord at a specific lyric character
+        // index (see resolveLyricCharIndex) - returns its resulting
+        // index-sorted chordIdx so the caller can open the rename popup on
+        // it immediately, same as insertChordAt's tagged-view counterpart.
+        function insertSourceChordAt(lineIdx, charIndex, name) {
+            const found = findSourceChordLine(lineIdx);
+            if (!found) return null;
+            const { song, line } = found;
+            const clamped = Math.max(0, Math.min(charIndex, line.lyric.length));
+            const newChord = { chord: name, index: clamped, measureDuration: null };
+            const sorted = [...line.chords, newChord].sort((a, b) => a.index - b.index);
+            const chordIdx = sorted.indexOf(newChord);
+            line.chords = sorted;
+            commitSourceLine(song, line);
+            return chordIdx;
+        }
+
+        // Pixel width of one monospace character in the same font/size the
+        // sheet's lyric/chord rows render in - measured with a hidden probe
+        // element rather than assumed, so it stays correct regardless of
+        // zoom, screen density, or future font tweaks. Used to convert a
+        // drag's pixel delta into a character-index delta (see
+        // nudgeSourceChordPosition) - the Source view has no measure grid
+        // to estimate a scale from the way estimateLocalPixelsPerMeasure
+        // does for the tagged view.
+        function measureMonospaceCharWidth() {
+            const probe = document.createElement('span');
+            probe.style.font = "700 15px 'SF Mono', Menlo, Consolas, 'Courier New', monospace";
+            probe.style.position = 'absolute';
+            probe.style.visibility = 'hidden';
+            probe.style.whiteSpace = 'pre';
+            probe.textContent = 'M';
+            document.body.appendChild(probe);
+            const width = probe.getBoundingClientRect().width;
+            document.body.removeChild(probe);
+            return width || null;
+        }
+
+        // Dragging a chord left/right in the Source view moves WHERE in the
+        // line's text it sits, snapped to the nearest whole character -
+        // simpler than the tagged view's nudgeChordTiming since there's no
+        // duration/neighbor timing to preserve, just this one chord's own
+        // position.
+        function nudgeSourceChordPosition(lineIdx, chordIdx, deltaPx) {
+            const found = findSourceChord(lineIdx, chordIdx);
+            if (!found) return false;
+            const pxPerChar = measureMonospaceCharWidth();
+            if (!pxPerChar) return false;
+            const deltaChars = Math.round(deltaPx / pxPerChar);
+            if (!deltaChars) return false;
+            const { song, line, chord } = found;
+            const newIndex = Math.max(0, Math.min(chord.index + deltaChars, line.lyric.length));
+            if (newIndex === chord.index) return false;
+            chord.index = newIndex;
+            commitSourceLine(song, line);
+            return true;
+        }
+
+        // Resolves a click's pixel position to a character offset within a
+        // .sheet-lyric element's own rendered text, via the same real-DOM-
+        // text-node API contenteditable relies on for caret placement
+        // (unlike a <textarea>, whose internal text isn't exposed as DOM
+        // text nodes this way). Returns null if the point didn't land
+        // inside this element's own text at all (e.g. a click past the end
+        // of a short line still resolves to a nearby node in Chrome/Safari,
+        // but the explicit .contains check guards Firefox's stricter
+        // caretPositionFromPoint from ever returning a foreign node).
+        function resolveLyricCharIndex(lyricEl, clientX, clientY) {
+            let node, offset;
+            if (document.caretRangeFromPoint) {
+                const range = document.caretRangeFromPoint(clientX, clientY);
+                if (!range) return null;
+                node = range.startContainer;
+                offset = range.startOffset;
+            } else if (document.caretPositionFromPoint) {
+                const pos = document.caretPositionFromPoint(clientX, clientY);
+                if (!pos) return null;
+                node = pos.offsetNode;
+                offset = pos.offset;
+            } else {
+                return null;
+            }
+            if (!lyricEl.contains(node)) return null;
+            return offset;
         }
 
         // --- Section wrapping (Ctrl+Alt+V/C/B/T) ---
@@ -5735,15 +5943,23 @@
             popup.style.top = `${rect.bottom + 6}px`;
         }
 
-        function showDurationPopup(targetEl, lineIdx, chordIdx) {
-            const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
-            const lt = currentLineTimings[lineIdx];
-            const cp = lt && lt.chordPositions[chordIdx];
-            const current = cp ? cp.measureDuration : chordDurationMeasures;
-
-            durationPopupState = { lineIdx, chordIdx };
+        // mode 'tagged' shows the -/+ duration stepper (a source chord has
+        // no duration to step); 'source' hides it, leaving just the name
+        // field and the delete button.
+        function showDurationPopup(targetEl, lineIdx, chordIdx, mode) {
+            durationPopupState = { lineIdx, chordIdx, mode };
             document.getElementById('durationPopupChord').value = targetEl.textContent;
-            updateDurationPopupValue(current);
+
+            const showStepper = mode === 'tagged';
+            document.getElementById('durationPopupMinus').style.display = showStepper ? '' : 'none';
+            document.getElementById('durationPopupValue').style.display = showStepper ? '' : 'none';
+            document.getElementById('durationPopupPlus').style.display = showStepper ? '' : 'none';
+            if (showStepper) {
+                const chordDurationMeasures = parseFloat(document.getElementById('chordDurationSelect').value);
+                const lt = currentLineTimings[lineIdx];
+                const cp = lt && lt.chordPositions[chordIdx];
+                updateDurationPopupValue(cp ? cp.measureDuration : chordDurationMeasures);
+            }
 
             const popup = document.getElementById('durationPopup');
             popup.style.display = 'flex';
@@ -5756,11 +5972,11 @@
         }
 
         function stepDurationPopup(delta) {
-            if (!durationPopupState) return;
-            const { lineIdx, chordIdx } = durationPopupState;
+            if (!durationPopupState || durationPopupState.mode !== 'tagged') return;
+            const { lineIdx, chordIdx, mode } = durationPopupState;
             const next = adjustChordDuration(lineIdx, chordIdx, delta);
             if (next == null) { hideDurationPopup(); return; }
-            durationPopupState = { lineIdx, chordIdx };
+            durationPopupState = { lineIdx, chordIdx, mode };
             updateDurationPopupValue(next);
             const target = document.querySelector(`#sheetPane .chord-label[data-line-idx="${lineIdx}"][data-chord-idx="${chordIdx}"]`);
             if (target) positionDurationPopup(target);
@@ -5768,11 +5984,13 @@
 
         function commitDurationPopupChordName() {
             if (!durationPopupState) return;
-            const { lineIdx, chordIdx } = durationPopupState;
+            const { lineIdx, chordIdx, mode } = durationPopupState;
             const input = document.getElementById('durationPopupChord');
-            const applied = renameChordAt(lineIdx, chordIdx, input.value);
+            const applied = mode === 'tagged'
+                ? renameChordAt(lineIdx, chordIdx, input.value)
+                : renameSourceChordAt(lineIdx, chordIdx, input.value);
             if (applied == null) { hideDurationPopup(); return; }
-            durationPopupState = { lineIdx, chordIdx };
+            durationPopupState = { lineIdx, chordIdx, mode };
             input.value = applied;
             const target = document.querySelector(`#sheetPane .chord-label[data-line-idx="${lineIdx}"][data-chord-idx="${chordIdx}"]`);
             if (target) positionDurationPopup(target);
@@ -5786,8 +6004,9 @@
         });
         document.getElementById('durationPopupDelete').addEventListener('click', () => {
             if (!durationPopupState) return;
-            const { lineIdx, chordIdx } = durationPopupState;
-            deleteChordAt(lineIdx, chordIdx);
+            const { lineIdx, chordIdx, mode } = durationPopupState;
+            if (mode === 'tagged') deleteChordAt(lineIdx, chordIdx);
+            else deleteSourceChordAt(lineIdx, chordIdx);
             hideDurationPopup();
         });
 
@@ -5812,17 +6031,17 @@
         // Drag-to-reorder state for the chord-label pointer handlers below.
         // A real drag vs. a plain click (which opens the duration popup) is
         // disambiguated by a small movement threshold - see pointermove.
-        let chordDragState = null; // { lineIdx, chordIdx, pointerId, startX, moved, el }
+        let chordDragState = null; // { lineIdx, chordIdx, mode, pointerId, startX, moved, el }
         let suppressNextChordClick = false;
 
         document.getElementById('sheetPane').addEventListener('pointerdown', (e) => {
-            if (!document.getElementById('sourceViewTagged').checked) return;
             const target = e.target.closest('.chord-label');
             if (!target) return;
             const lineIdx = parseInt(target.dataset.lineIdx, 10);
             const chordIdx = parseInt(target.dataset.chordIdx, 10);
             if (isNaN(lineIdx) || isNaN(chordIdx)) return;
-            chordDragState = { lineIdx, chordIdx, pointerId: e.pointerId, startX: e.clientX, moved: false, el: target };
+            const mode = document.getElementById('sourceViewTagged').checked ? 'tagged' : 'source';
+            chordDragState = { lineIdx, chordIdx, mode, pointerId: e.pointerId, startX: e.clientX, moved: false, el: target };
         });
 
         document.getElementById('sheetPane').addEventListener('pointermove', (e) => {
@@ -5840,15 +6059,19 @@
 
         function endChordDrag(e) {
             if (!chordDragState || e.pointerId !== chordDragState.pointerId) return;
-            const { lineIdx, chordIdx, moved, el, startX } = chordDragState;
+            const { lineIdx, chordIdx, mode, moved, el, startX } = chordDragState;
             el.style.transform = '';
             el.classList.remove('dragging');
             if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
             chordDragState = null;
             if (moved) {
                 suppressNextChordClick = true;
-                const scale = estimateLocalPixelsPerMeasure(lineIdx, chordIdx);
-                if (scale) nudgeChordTiming(lineIdx, chordIdx, (e.clientX - startX) / scale);
+                if (mode === 'tagged') {
+                    const scale = estimateLocalPixelsPerMeasure(lineIdx, chordIdx);
+                    if (scale) nudgeChordTiming(lineIdx, chordIdx, (e.clientX - startX) / scale);
+                } else {
+                    nudgeSourceChordPosition(lineIdx, chordIdx, e.clientX - startX);
+                }
             }
         }
         document.getElementById('sheetPane').addEventListener('pointerup', endChordDrag);
@@ -5856,7 +6079,7 @@
 
         document.getElementById('sheetPane').addEventListener('click', (e) => {
             if (suppressNextChordClick) { suppressNextChordClick = false; return; }
-            if (!document.getElementById('sourceViewTagged').checked) return;
+            const isTagged = document.getElementById('sourceViewTagged').checked;
 
             const target = e.target.closest('.chord-label');
             if (target) {
@@ -5864,31 +6087,57 @@
                 const chordIdx = parseInt(target.dataset.chordIdx, 10);
                 if (isNaN(lineIdx) || isNaN(chordIdx)) return;
                 e.stopPropagation();
-                showDurationPopup(target, lineIdx, chordIdx);
+                showDurationPopup(target, lineIdx, chordIdx, isTagged ? 'tagged' : 'source');
                 return;
             }
 
-            // Shift-click on the tick-marks row (not the chord-name row
-            // below it, and not a plain click - too easy to fire by
-            // accident) inserts a new chord there - see insertChordAt. The
-            // tick row is the click target specifically so the cursor can
-            // land precisely on a tick, rather than aiming through the
-            // chord names themselves; the x position is the same either
-            // way, so findInsertionGap/insertChordAt need no changes.
             if (!e.shiftKey) return;
-            const ticks = e.target.closest('.sheet-ticks');
-            const lineEl = ticks && ticks.closest('.sheet-line');
-            const lineIdx = lineEl ? parseInt(lineEl.dataset.lineIdx, 10) : NaN;
-            if (isNaN(lineIdx)) return;
-            e.stopPropagation();
-            const targetChordIdx = findInsertionGap(lineIdx, e.clientX);
-            insertChordAt(lineIdx, targetChordIdx, e.clientX);
-            const newTarget = document.querySelector(`#sheetPane .chord-label[data-line-idx="${lineIdx}"][data-chord-idx="${targetChordIdx}"]`);
-            if (newTarget) {
-                showDurationPopup(newTarget, lineIdx, targetChordIdx);
-                const nameInput = document.getElementById('durationPopupChord');
-                nameInput.focus();
-                nameInput.select();
+
+            if (isTagged) {
+                // Shift-click on the tick-marks row (not the chord-name row
+                // below it, and not a plain click - too easy to fire by
+                // accident) inserts a new chord there - see insertChordAt.
+                // The tick row is the click target specifically so the
+                // cursor can land precisely on a tick, rather than aiming
+                // through the chord names themselves; the x position is the
+                // same either way, so findInsertionGap/insertChordAt need
+                // no changes.
+                const ticks = e.target.closest('.sheet-ticks');
+                const lineEl = ticks && ticks.closest('.sheet-line');
+                const lineIdx = lineEl ? parseInt(lineEl.dataset.lineIdx, 10) : NaN;
+                if (isNaN(lineIdx)) return;
+                e.stopPropagation();
+                const targetChordIdx = findInsertionGap(lineIdx, e.clientX);
+                insertChordAt(lineIdx, targetChordIdx, e.clientX);
+                const newTarget = document.querySelector(`#sheetPane .chord-label[data-line-idx="${lineIdx}"][data-chord-idx="${targetChordIdx}"]`);
+                if (newTarget) {
+                    showDurationPopup(newTarget, lineIdx, targetChordIdx, 'tagged');
+                    const nameInput = document.getElementById('durationPopupChord');
+                    nameInput.focus();
+                    nameInput.select();
+                }
+            } else {
+                // Shift-click directly on the lyric text (no separate tick
+                // row in the Source view) inserts a new chord at that exact
+                // character - see resolveLyricCharIndex/insertSourceChordAt.
+                const lyricEl = e.target.closest('.sheet-lyric');
+                const lineEl = lyricEl && lyricEl.closest('.sheet-line');
+                if (!lyricEl || !lineEl) return;
+                const lineIdx = parseInt(lineEl.dataset.lineIdx, 10);
+                if (isNaN(lineIdx)) return;
+                const offset = resolveLyricCharIndex(lyricEl, e.clientX, e.clientY);
+                if (offset == null) return;
+                const wrapStart = parseInt(lineEl.dataset.wrapStart || '0', 10);
+                e.stopPropagation();
+                const newChordIdx = insertSourceChordAt(lineIdx, wrapStart + offset, 'C');
+                if (newChordIdx == null) return;
+                const newTarget = document.querySelector(`#sheetPane .chord-label[data-line-idx="${lineIdx}"][data-chord-idx="${newChordIdx}"]`);
+                if (newTarget) {
+                    showDurationPopup(newTarget, lineIdx, newChordIdx, 'source');
+                    const nameInput = document.getElementById('durationPopupChord');
+                    nameInput.focus();
+                    nameInput.select();
+                }
             }
         });
 
