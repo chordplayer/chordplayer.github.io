@@ -1071,6 +1071,12 @@
         opacity: 0.85;
     }
 
+    /* Alt/Option-drag (Source view only) duplicates instead of moving -
+       see duplicateSourceChordAt - swap the cursor to signal that. */
+    #sheetPane.source-editable .chord-label.copying {
+        cursor: copy;
+    }
+
     /* The chord currently sounding during Scroll/Play Chords playback, and
        the chord that will resume next (below) share this same look - scale
        rather than resize the font so it doesn't reflow the grid's
@@ -2568,10 +2574,34 @@
         // resolveLyricCharIndex can be translated back to the real
         // character index even when a long line has been word-wrapped
         // into several rows for the screen.
+        // Chord DISPLAY positions - same greedy left-to-right spacing
+        // buildChordLine uses, just producing per-chord "ch" offsets
+        // instead of a padded text string: a chord's own lyric index is
+        // its position unless that would land it flush against (or inside)
+        // the chord immediately before it, most commonly two/three chords
+        // with no lyric text between them at all (e.g. an instrumental run
+        // "[G] [Am] [D]", where every chord shares nearly the same index) -
+        // then it's pushed out to sit right after the previous chord's own
+        // rendered width instead, so labels never overlap. Purely a
+        // rendering adjustment: data-chord-idx addressing, drag deltas, and
+        // resolveLyricCharIndex all still key off the chord's REAL index,
+        // untouched here.
+        function computeChordDisplayIndexes(sorted) {
+            let cursor = 0;
+            return sorted.map((chord) => {
+                let pos = Math.max(chord.index, cursor);
+                if (cursor > 0 && pos === cursor) pos += 1;
+                cursor = pos + Math.max(chord.chord.length, 1);
+                return pos;
+            });
+        }
+
         function buildClassicLineHTML(line, lineIdx, maxChars) {
             const ranges = wrapTextRanges(line.lyric, maxChars);
             const sorted = [...line.chords].sort((a, b) => a.index - b.index);
-            const chordBuckets = bucketByRange(sorted, ranges, (c) => c.index);
+            const displayIndexes = computeChordDisplayIndexes(sorted);
+            const displayChords = sorted.map((chord, i) => ({ chord, displayIndex: displayIndexes[i] }));
+            const chordBuckets = bucketByRange(displayChords, ranges, (d) => d.displayIndex);
 
             let out = '';
             ranges.forEach((range, segIdx) => {
@@ -2579,8 +2609,8 @@
                 let html = `<div class="sheet-line" data-line-idx="${lineIdx}" data-wrap-start="${range.start}">`;
                 html += '<div class="sheet-grid-classic">';
                 html += '<div class="sheet-chords-grid">';
-                for (const { item: chord, origIdx, localPos } of chordBuckets[segIdx]) {
-                    html += `<span class="chord-label" data-line-idx="${lineIdx}" data-chord-idx="${origIdx}" style="left:${localPos}ch">${escapeHtml(chord.chord)}</span>`;
+                for (const { item: d, origIdx, localPos } of chordBuckets[segIdx]) {
+                    html += `<span class="chord-label" data-line-idx="${lineIdx}" data-chord-idx="${origIdx}" style="left:${localPos}ch">${escapeHtml(d.chord.chord)}</span>`;
                 }
                 html += '</div>';
                 html += '</div>';
@@ -5449,6 +5479,22 @@
             return true;
         }
 
+        // Alt/Option-drag equivalent of nudgeSourceChordPosition - same
+        // pixel-delta-to-character-delta math, but leaves the dragged
+        // chord where it started and inserts a same-named copy at the
+        // drop point instead (see insertSourceChordAt).
+        function duplicateSourceChordAt(lineIdx, chordIdx, deltaPx) {
+            const found = findSourceChord(lineIdx, chordIdx);
+            if (!found) return false;
+            const pxPerChar = measureMonospaceCharWidth();
+            if (!pxPerChar) return false;
+            const deltaChars = Math.round(deltaPx / pxPerChar);
+            if (!deltaChars) return false;
+            const { line, chord } = found;
+            const newIndex = Math.max(0, Math.min(chord.index + deltaChars, line.lyric.length));
+            return insertSourceChordAt(lineIdx, newIndex, chord.chord) != null;
+        }
+
         // Resolves a click's pixel position to a character offset within a
         // .sheet-lyric element's own rendered text, via the same real-DOM-
         // text-node API contenteditable relies on for caret placement
@@ -6031,7 +6077,11 @@
         // Drag-to-reorder state for the chord-label pointer handlers below.
         // A real drag vs. a plain click (which opens the duration popup) is
         // disambiguated by a small movement threshold - see pointermove.
-        let chordDragState = null; // { lineIdx, chordIdx, mode, pointerId, startX, moved, el }
+        // isCopy (Source view only - see duplicateSourceChordAt) is decided
+        // at pointerdown from whether Option/Alt was already held, matching
+        // the standard "modifier-drag duplicates" convention rather than
+        // requiring a separate copy/paste clipboard.
+        let chordDragState = null; // { lineIdx, chordIdx, mode, isCopy, pointerId, startX, moved, el }
         let suppressNextChordClick = false;
 
         document.getElementById('sheetPane').addEventListener('pointerdown', (e) => {
@@ -6041,7 +6091,8 @@
             const chordIdx = parseInt(target.dataset.chordIdx, 10);
             if (isNaN(lineIdx) || isNaN(chordIdx)) return;
             const mode = document.getElementById('sourceViewTagged').checked ? 'tagged' : 'source';
-            chordDragState = { lineIdx, chordIdx, mode, pointerId: e.pointerId, startX: e.clientX, moved: false, el: target };
+            const isCopy = mode === 'source' && e.altKey;
+            chordDragState = { lineIdx, chordIdx, mode, isCopy, pointerId: e.pointerId, startX: e.clientX, moved: false, el: target };
         });
 
         document.getElementById('sheetPane').addEventListener('pointermove', (e) => {
@@ -6050,6 +6101,7 @@
             if (!chordDragState.moved && Math.abs(dx) > 4) {
                 chordDragState.moved = true;
                 chordDragState.el.classList.add('dragging');
+                if (chordDragState.isCopy) chordDragState.el.classList.add('copying');
                 chordDragState.el.setPointerCapture(chordDragState.pointerId);
             }
             if (chordDragState.moved) {
@@ -6059,9 +6111,9 @@
 
         function endChordDrag(e) {
             if (!chordDragState || e.pointerId !== chordDragState.pointerId) return;
-            const { lineIdx, chordIdx, mode, moved, el, startX } = chordDragState;
+            const { lineIdx, chordIdx, mode, isCopy, moved, el, startX } = chordDragState;
             el.style.transform = '';
-            el.classList.remove('dragging');
+            el.classList.remove('dragging', 'copying');
             if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
             chordDragState = null;
             if (moved) {
@@ -6069,6 +6121,8 @@
                 if (mode === 'tagged') {
                     const scale = estimateLocalPixelsPerMeasure(lineIdx, chordIdx);
                     if (scale) nudgeChordTiming(lineIdx, chordIdx, (e.clientX - startX) / scale);
+                } else if (isCopy) {
+                    duplicateSourceChordAt(lineIdx, chordIdx, e.clientX - startX);
                 } else {
                     nudgeSourceChordPosition(lineIdx, chordIdx, e.clientX - startX);
                 }
