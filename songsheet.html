@@ -3347,6 +3347,7 @@
             // removed out from under the pointer) - a fresh pointerover
             // re-sets it if the mouse is still actually over a chord.
             hoveredSourceChord = null;
+            hoveredSourceLine = null;
             updateResumeFlashDOM();
             renderLegend();
             updatePrintOutput(displaySong, timing, markTime);
@@ -5537,6 +5538,18 @@
         let hoveredSourceChord = null; // { lineIdx, chordIdx }
         let copiedSourceChordName = null;
 
+        // Whole-line copy/paste: hovering anywhere on a line (not a
+        // specific chord - that's hoveredSourceChord above) and pressing
+        // Cmd/Ctrl+C copies every chord on it; Cmd/Ctrl+V on a hovered
+        // line then pastes them there. Positions are stored/restored as a
+        // fraction of the line's own WORD span (not syllables - there's no
+        // reliable syllable-counting algorithm for English, while word
+        // boundaries are exact) so they land in a reasonable spot on a
+        // differently-worded target line - see copyLineChords/
+        // pasteLineChords.
+        let hoveredSourceLine = null; // lineIdx
+        let copiedLineChords = null; // [{ chord, fraction }]
+
         function collectSongLines(song) {
             const lines = [];
             for (const section of song.sections) {
@@ -5676,6 +5689,81 @@
             line.chords = sorted;
             commitSourceLine(song, line);
             return chordIdx;
+        }
+
+        // Every non-whitespace run in `lyric`, as {start, end} char ranges -
+        // the "words" copyLineChords/pasteLineChords position chords
+        // against.
+        function findWordRanges(lyric) {
+            const ranges = [];
+            const re = /\S+/g;
+            let m;
+            while ((m = re.exec(lyric))) ranges.push({ start: m.index, end: m.index + m[0].length });
+            return ranges;
+        }
+
+        // Which word a chord at `charIndex` belongs to: the last word
+        // starting at or before it (a chord sits right before the lyric
+        // text it was typed against, so this is "the word it's attached to
+        // or immediately follows") - word 0 if it's before every word (or
+        // there are no words at all).
+        function wordIndexForCharIndex(charIndex, words) {
+            let idx = 0;
+            for (let i = 0; i < words.length; i++) {
+                if (words[i].start <= charIndex) idx = i;
+                else break;
+            }
+            return idx;
+        }
+
+        // 0..1 position of `wordIdx` among `totalWords` words - first word
+        // is 0, last word is 1 (a single-word line is always 0).
+        function wordFraction(wordIdx, totalWords) {
+            return totalWords > 1 ? wordIdx / (totalWords - 1) : 0;
+        }
+
+        // Copies every chord on `lineIdx` into copiedLineChords, each as
+        // {chord, fraction} - its lyric character position converted to a
+        // word-span fraction rather than a raw char index, since the
+        // paste target is almost always a differently-worded line.
+        function copyLineChords(lineIdx) {
+            const found = findSourceChordLine(lineIdx);
+            if (!found) return;
+            const { line } = found;
+            const words = findWordRanges(line.lyric);
+            const sorted = [...line.chords].sort((a, b) => a.index - b.index);
+            copiedLineChords = sorted.map((c) => ({
+                chord: c.chord,
+                fraction: wordFraction(wordIndexForCharIndex(c.index, words), words.length),
+            }));
+        }
+
+        // Pastes copiedLineChords onto `lineIdx`, REPLACING whatever
+        // chords are already there - each fraction is mapped to the
+        // nearest word on this line (or, if this line has no words at all,
+        // the same fraction of its raw character length instead, so a
+        // paste onto a chord-only/instrumental line still lands somewhere
+        // reasonable). Intentionally approximate - the whole point is a
+        // quick starting layout you then drag individual chords to
+        // fine-tune, not an exact transcription.
+        function pasteLineChords(lineIdx) {
+            if (!copiedLineChords || !copiedLineChords.length) return;
+            const found = findSourceChordLine(lineIdx);
+            if (!found) return;
+            const { song, line } = found;
+            const words = findWordRanges(line.lyric);
+            const newChords = copiedLineChords.map(({ chord, fraction }) => {
+                let index;
+                if (words.length) {
+                    const wordIdx = Math.max(0, Math.min(Math.round(fraction * (words.length - 1)), words.length - 1));
+                    index = words[wordIdx].start;
+                } else {
+                    index = Math.round(fraction * line.lyric.length);
+                }
+                return { chord, index: Math.max(0, Math.min(index, line.lyric.length)), measureDuration: null };
+            });
+            line.chords = newChords.sort((a, b) => a.index - b.index);
+            commitSourceLine(song, line);
         }
 
         // Pixel width of one monospace character in the same font/size the
@@ -6387,33 +6475,50 @@
         document.getElementById('sheetPane').addEventListener('pointerup', endChordDrag);
         document.getElementById('sheetPane').addEventListener('pointercancel', endChordDrag);
 
-        // Hover-to-copy: no need to click a chord open first - just rest
-        // the pointer on it (the same grab-cursor chord you'd click or
-        // drag) and press Cmd/Ctrl+C. Source view only; the tagged
-        // ChordPlayer view has no analogous copy feature.
+        // Hover-to-copy: no need to click anything open first - just rest
+        // the pointer somewhere and press Cmd/Ctrl+C. Over a specific
+        // chord (the same grab-cursor chord you'd click or drag), that
+        // copies just that chord's name; anywhere else on a line, it
+        // copies every chord on the whole line (see copyLineChords).
+        // Source view only; the tagged ChordPlayer view has no analogous
+        // copy feature.
         document.getElementById('sheetPane').addEventListener('pointerover', (e) => {
             if (document.getElementById('sourceViewTagged').checked) return;
+            const lineEl = e.target.closest('.sheet-line[data-line-idx]');
+            const lineIdx = lineEl ? parseInt(lineEl.dataset.lineIdx, 10) : NaN;
+            hoveredSourceLine = isNaN(lineIdx) ? null : lineIdx;
             const target = e.target.closest('.chord-label');
             if (!target) { hoveredSourceChord = null; return; }
-            const lineIdx = parseInt(target.dataset.lineIdx, 10);
+            const chordLineIdx = parseInt(target.dataset.lineIdx, 10);
             const chordIdx = parseInt(target.dataset.chordIdx, 10);
-            if (isNaN(lineIdx) || isNaN(chordIdx)) return;
-            hoveredSourceChord = { lineIdx, chordIdx };
+            if (isNaN(chordLineIdx) || isNaN(chordIdx)) return;
+            hoveredSourceChord = { lineIdx: chordLineIdx, chordIdx };
         });
         document.getElementById('sheetPane').addEventListener('pointerout', (e) => {
             if (e.target.closest('.chord-label') && !e.relatedTarget?.closest?.('.chord-label')) {
                 hoveredSourceChord = null;
             }
+            if (e.target.closest('.sheet-line[data-line-idx]') && !e.relatedTarget?.closest?.('.sheet-line[data-line-idx]')) {
+                hoveredSourceLine = null;
+            }
         });
 
         document.addEventListener('keydown', (e) => {
-            if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'c') return;
-            if (!hoveredSourceChord) return;
+            if (!(e.metaKey || e.ctrlKey)) return;
+            const key = e.key.toLowerCase();
+            if (key !== 'c' && key !== 'v') return;
             const tag = document.activeElement && document.activeElement.tagName;
-            if (tag === 'INPUT' || tag === 'TEXTAREA') return; // let normal text copy through
-            const found = findSourceChord(hoveredSourceChord.lineIdx, hoveredSourceChord.chordIdx);
-            if (!found) return;
-            copiedSourceChordName = found.chord.chord;
+            if (tag === 'INPUT' || tag === 'TEXTAREA') return; // let normal text copy/paste through
+            if (key === 'c') {
+                if (hoveredSourceChord) {
+                    const found = findSourceChord(hoveredSourceChord.lineIdx, hoveredSourceChord.chordIdx);
+                    if (found) copiedSourceChordName = found.chord.chord;
+                } else if (hoveredSourceLine != null) {
+                    copyLineChords(hoveredSourceLine);
+                }
+            } else if (hoveredSourceLine != null) {
+                pasteLineChords(hoveredSourceLine);
+            }
         });
 
         document.getElementById('sheetPane').addEventListener('click', (e) => {
