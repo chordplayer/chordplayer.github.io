@@ -1078,7 +1078,8 @@
        the highlighted box's left edge stays where the chord was anchored. */
     .chord-label.chord-active,
     .chord-label.resume-flash,
-    .chord-label.resume-highlight {
+    .chord-label.resume-highlight,
+    .chord-label.copy-flash {
         background: #1a73e8;
         color: #fff;
         border-radius: 4px;
@@ -1091,6 +1092,21 @@
 
     .chord-label.chord-active {
         transition: transform 0.15s ease, background 0.15s ease;
+    }
+
+    /* Momentary feedback for Cmd/Ctrl+C (and +V) in the Source view - see
+       flashCopyFeedback. Green rather than the playback-blue used above,
+       so a copy-in-progress next to the resume-point flash (if scrolling
+       is paused) never reads as "this chord is about to play". Eases back
+       to normal via .chord-label's own transition (below) when the class
+       is removed a moment later, rather than an abrupt snap. */
+    .chord-label.copy-flash {
+        background: #1a8e4a;
+        transition: none;
+    }
+
+    .chord-label {
+        transition: background 0.35s ease, color 0.35s ease, transform 0.35s ease;
     }
 
     /* Either a right-click-marked chord, or (with no explicit mark) the
@@ -5764,6 +5780,21 @@
             });
             line.chords = newChords.sort((a, b) => a.index - b.index);
             commitSourceLine(song, line);
+            flashCopyFeedback(lineIdx, null);
+        }
+
+        // Momentary green highlight (see .chord-label.copy-flash) on
+        // whatever a copy or paste just touched - `chordIdxs` is a
+        // specific list (single-chord copy) or null (every chord-label on
+        // the line, for whole-line copy/paste). The only feedback these
+        // otherwise-silent keyboard actions give.
+        function flashCopyFeedback(lineIdx, chordIdxs) {
+            const selector = chordIdxs
+                ? chordIdxs.map((i) => `#sheetPane .chord-label[data-line-idx="${lineIdx}"][data-chord-idx="${i}"]`).join(',')
+                : `#sheetPane .chord-label[data-line-idx="${lineIdx}"]`;
+            const els = document.querySelectorAll(selector);
+            els.forEach((el) => el.classList.add('copy-flash'));
+            setTimeout(() => els.forEach((el) => el.classList.remove('copy-flash')), 350);
         }
 
         // Pixel width of one monospace character in the same font/size the
@@ -6512,9 +6543,13 @@
             if (key === 'c') {
                 if (hoveredSourceChord) {
                     const found = findSourceChord(hoveredSourceChord.lineIdx, hoveredSourceChord.chordIdx);
-                    if (found) copiedSourceChordName = found.chord.chord;
+                    if (found) {
+                        copiedSourceChordName = found.chord.chord;
+                        flashCopyFeedback(hoveredSourceChord.lineIdx, [hoveredSourceChord.chordIdx]);
+                    }
                 } else if (hoveredSourceLine != null) {
                     copyLineChords(hoveredSourceLine);
+                    flashCopyFeedback(hoveredSourceLine, null);
                 }
             } else if (hoveredSourceLine != null) {
                 pasteLineChords(hoveredSourceLine);
