@@ -5564,7 +5564,7 @@
         // counting algorithm for English, while word boundaries are exact)
         // so they land in a reasonable spot on a differently-worded target
         // line - see copyLineChords/pasteLineChords.
-        let copiedLineChords = null; // [{ chord, fraction }]
+        let copiedLineChords = null; // [ [{ chord, fraction }], ... ] - one entry per copied line, in order
 
         function collectSongLines(song) {
             const lines = [];
@@ -5639,13 +5639,10 @@
         }
 
         // Rebuilds one raw source line's text from its own lyric + chords
-        // (interleaving each [chord] bracket back in at its own index),
-        // splices it back into chordProText at that line's original raw-
-        // text position, then re-tags the ChordPlayer buffer from it
-        // immediately (rather than waiting for the #rawPane blur handler,
-        // since these edits happen in the rendered Sheet view, which never
-        // blurs) so both views stay in sync live.
-        function commitSourceLine(song, line) {
+        // (interleaving each [chord] bracket back in at its own index) -
+        // pure, doesn't touch chordProText. Shared by commitSourceLine
+        // (one line) and pasteLinesChords (several lines in one commit).
+        function rebuildSourceLineText(line) {
             const sorted = [...line.chords].sort((a, b) => a.index - b.index);
             let rebuilt = '';
             let cursor = 0;
@@ -5655,8 +5652,17 @@
                 cursor = c.index;
             });
             rebuilt += line.lyric.slice(cursor);
+            return rebuilt;
+        }
+
+        // Splices one rebuilt line back into chordProText at its original
+        // raw-text position, then re-tags the ChordPlayer buffer from it
+        // immediately (rather than waiting for the #rawPane blur handler,
+        // since these edits happen in the rendered Sheet view, which never
+        // blurs) so both views stay in sync live.
+        function commitSourceLine(song, line) {
             const lines = chordProText.split(/\r?\n/);
-            lines[line._rawLine] = rebuilt;
+            lines[line._rawLine] = rebuildSourceLineText(line);
             chordProText = lines.join('\n');
             reTagFromEditedSource();
         }
@@ -5738,49 +5744,69 @@
             return totalWords > 1 ? wordIdx / (totalWords - 1) : 0;
         }
 
-        // Copies every chord on `lineIdx` into copiedLineChords, each as
-        // {chord, fraction} - its lyric character position converted to a
-        // word-span fraction rather than a raw char index, since the
-        // paste target is almost always a differently-worded line.
-        function copyLineChords(lineIdx) {
-            const found = findSourceChordLine(lineIdx);
-            if (!found) return;
-            const { line } = found;
-            const words = findWordRanges(line.lyric);
-            const sorted = [...line.chords].sort((a, b) => a.index - b.index);
-            copiedLineChords = sorted.map((c) => ({
-                chord: c.chord,
-                fraction: wordFraction(wordIndexForCharIndex(c.index, words), words.length),
-            }));
+        // Copies every selected line's chords into copiedLineChords - an
+        // array of per-line chord lists (each {chord, fraction}, word-span
+        // fraction rather than raw char index) in top-to-bottom order, so
+        // pasting can lay the whole set back down starting anywhere. A
+        // line with no chords (or past the end of the song) still gets its
+        // own [] slot, so relative line offsets are preserved on paste.
+        function copyLinesChords(startLineIdx, endLineIdx) {
+            const song = parseChordPro(chordProText);
+            const songLines = collectSongLines(song);
+            const result = [];
+            for (let lineIdx = startLineIdx; lineIdx <= endLineIdx; lineIdx++) {
+                const line = songLines[lineIdx];
+                if (!line) { result.push([]); continue; }
+                const words = findWordRanges(line.lyric);
+                const sorted = [...line.chords].sort((a, b) => a.index - b.index);
+                result.push(sorted.map((c) => ({
+                    chord: c.chord,
+                    fraction: wordFraction(wordIndexForCharIndex(c.index, words), words.length),
+                })));
+            }
+            copiedLineChords = result;
         }
 
-        // Pastes copiedLineChords onto `lineIdx`, REPLACING whatever
-        // chords are already there - each fraction is mapped to the
-        // nearest word on this line (or, if this line has no words at all,
-        // the same fraction of its raw character length instead, so a
-        // paste onto a chord-only/instrumental line still lands somewhere
-        // reasonable). Intentionally approximate - the whole point is a
-        // quick starting layout you then drag individual chords to
-        // fine-tune, not an exact transcription.
-        function pasteLineChords(lineIdx) {
+        // Pastes copiedLineChords starting at startLineIdx - copied line 0
+        // lands on startLineIdx, line 1 on startLineIdx+1, and so on,
+        // stopping early if the song runs out of lines. Each line's
+        // existing chords are REPLACED; each fraction is mapped to the
+        // nearest word on ITS OWN target line (or, if that line has no
+        // words at all, the same fraction of its raw character length, so
+        // a paste onto a chord-only/instrumental line still lands
+        // somewhere reasonable). Intentionally approximate - the whole
+        // point is a quick starting layout you then drag individual chords
+        // to fine-tune, not an exact transcription. All target lines are
+        // rewritten and committed in a single pass (one parse, one re-tag)
+        // rather than one commit per line.
+        function pasteLinesChords(startLineIdx) {
             if (!copiedLineChords || !copiedLineChords.length) return;
-            const found = findSourceChordLine(lineIdx);
-            if (!found) return;
-            const { song, line } = found;
-            const words = findWordRanges(line.lyric);
-            const newChords = copiedLineChords.map(({ chord, fraction }) => {
-                let index;
-                if (words.length) {
-                    const wordIdx = Math.max(0, Math.min(Math.round(fraction * (words.length - 1)), words.length - 1));
-                    index = words[wordIdx].start;
-                } else {
-                    index = Math.round(fraction * line.lyric.length);
-                }
-                return { chord, index: Math.max(0, Math.min(index, line.lyric.length)), measureDuration: null };
+            const song = parseChordPro(chordProText);
+            const songLines = collectSongLines(song);
+            const rawLines = chordProText.split(/\r?\n/);
+            const pastedLineIdxs = [];
+            copiedLineChords.forEach((lineChords, offset) => {
+                const line = songLines[startLineIdx + offset];
+                if (!line) return; // ran off the end of the song
+                const words = findWordRanges(line.lyric);
+                const newChords = lineChords.map(({ chord, fraction }) => {
+                    let index;
+                    if (words.length) {
+                        const wordIdx = Math.max(0, Math.min(Math.round(fraction * (words.length - 1)), words.length - 1));
+                        index = words[wordIdx].start;
+                    } else {
+                        index = Math.round(fraction * line.lyric.length);
+                    }
+                    return { chord, index: Math.max(0, Math.min(index, line.lyric.length)), measureDuration: null };
+                });
+                line.chords = newChords.sort((a, b) => a.index - b.index);
+                rawLines[line._rawLine] = rebuildSourceLineText(line);
+                pastedLineIdxs.push(startLineIdx + offset);
             });
-            line.chords = newChords.sort((a, b) => a.index - b.index);
-            commitSourceLine(song, line);
-            flashCopyFeedback(lineIdx, null);
+            if (!pastedLineIdxs.length) return;
+            chordProText = rawLines.join('\n');
+            reTagFromEditedSource();
+            pastedLineIdxs.forEach((lineIdx) => flashCopyFeedback(lineIdx, null));
         }
 
         // Momentary green highlight (see .chord-label.copy-flash) on
@@ -6535,23 +6561,25 @@
             if (document.getElementById('sourceViewTagged').checked) return;
 
             // Ctrl+Cmd+C/V (both modifiers together, distinguishing this
-            // from the single-chord hover+Cmd/Ctrl+C above): select a
-            // line's lyric text - the same selection
+            // from the single-chord hover+Cmd/Ctrl+C above): select one or
+            // more lines' lyric text - the same selection
             // getSelectedLineIdxRange already reads for the section-wrap
-            // shortcut - to copy/paste that WHOLE line's chords. A
-            // multi-line selection uses just its first line.
+            // shortcut - to copy/paste that WHOLE set of lines' chords.
+            // Pasting re-selects just the first line to paste onto -
+            // copiedLineChords carries the rest of the set down from
+            // there, line-for-line (see pasteLinesChords).
             if (e.metaKey && e.ctrlKey) {
                 const range = getSelectedLineIdxRange();
                 if (!range) {
-                    alert('Select (highlight) a line’s lyrics first, then use this shortcut.');
+                    alert('Select (highlight) one or more lines’ lyrics first, then use this shortcut.');
                     return;
                 }
                 e.preventDefault();
                 if (key === 'c') {
-                    copyLineChords(range.start);
-                    flashCopyFeedback(range.start, null);
+                    copyLinesChords(range.start, range.end);
+                    for (let lineIdx = range.start; lineIdx <= range.end; lineIdx++) flashCopyFeedback(lineIdx, null);
                 } else {
-                    pasteLineChords(range.start);
+                    pasteLinesChords(range.start);
                 }
                 return;
             }
