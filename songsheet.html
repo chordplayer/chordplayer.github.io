@@ -1117,14 +1117,66 @@
         position: fixed;
         z-index: 50;
         display: flex;
-        align-items: center;
-        gap: 8px;
+        flex-direction: column;
+        gap: 6px;
         background: #fff;
         border: 1px solid #ccc;
         border-radius: 8px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.18);
         padding: 6px 10px;
         font-size: 14px;
+    }
+
+    .duration-popup-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* Root/accidental/quality/dropdown chord picker - a second row below
+       the name/duration/delete controls. Selecting a dropdown option just
+       fills the name field (via commitDurationPopupChordName) same as
+       typing it by hand - the field stays freely editable either way. */
+    .chord-picker-row {
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .chord-picker-roots, .chord-picker-accidentals, .chord-picker-quality {
+        display: flex;
+        gap: 2px;
+    }
+
+    .chord-picker-root-btn, .chord-picker-accidental-btn, .chord-picker-quality-btn {
+        min-width: 22px;
+        height: 22px;
+        padding: 0 4px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background: #fafafa;
+        font-size: 12px;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .chord-picker-root-btn:hover, .chord-picker-accidental-btn:hover, .chord-picker-quality-btn:hover {
+        background: #f0f0f0;
+    }
+
+    .chord-picker-root-btn.active, .chord-picker-accidental-btn.active, .chord-picker-quality-btn.active {
+        background: #1a73e8;
+        border-color: #1a73e8;
+        color: #fff;
+    }
+
+    .chord-picker-select {
+        flex: 1;
+        min-width: 130px;
+        height: 22px;
+        font-size: 12px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        padding: 0 2px;
     }
 
     .duration-popup-chord {
@@ -1144,7 +1196,9 @@
         border-color: #1a73e8;
     }
 
-    .duration-popup button {
+    /* Direct-child combinator so this doesn't also catch the chord-picker
+       row's small toggle buttons below (nested one level deeper). */
+    .duration-popup-row > button {
         width: 26px;
         height: 26px;
         border-radius: 50%;
@@ -1155,7 +1209,7 @@
         cursor: pointer;
     }
 
-    .duration-popup button:hover {
+    .duration-popup-row > button:hover {
         background: #f0f0f0;
     }
 
@@ -1521,11 +1575,33 @@
     <div class="page-container">
         <div id="outputArea">
             <div id="durationPopup" class="duration-popup" style="display:none">
-                <input type="text" class="duration-popup-chord" id="durationPopupChord" autocomplete="off" spellcheck="false">
-                <button type="button" id="durationPopupMinus">&minus;</button>
-                <span class="duration-popup-value" id="durationPopupValue"></span>
-                <button type="button" id="durationPopupPlus">+</button>
-                <button type="button" class="duration-popup-delete" id="durationPopupDelete" title="Delete this chord">&times;</button>
+                <div class="duration-popup-row">
+                    <input type="text" class="duration-popup-chord" id="durationPopupChord" autocomplete="off" spellcheck="false">
+                    <button type="button" id="durationPopupMinus">&minus;</button>
+                    <span class="duration-popup-value" id="durationPopupValue"></span>
+                    <button type="button" id="durationPopupPlus">+</button>
+                    <button type="button" class="duration-popup-delete" id="durationPopupDelete" title="Delete this chord">&times;</button>
+                </div>
+                <div class="duration-popup-row chord-picker-row">
+                    <div class="chord-picker-roots">
+                        <button type="button" class="chord-picker-root-btn" data-root="A">A</button>
+                        <button type="button" class="chord-picker-root-btn" data-root="B">B</button>
+                        <button type="button" class="chord-picker-root-btn" data-root="C">C</button>
+                        <button type="button" class="chord-picker-root-btn" data-root="D">D</button>
+                        <button type="button" class="chord-picker-root-btn" data-root="E">E</button>
+                        <button type="button" class="chord-picker-root-btn" data-root="F">F</button>
+                        <button type="button" class="chord-picker-root-btn" data-root="G">G</button>
+                    </div>
+                    <div class="chord-picker-accidentals">
+                        <button type="button" class="chord-picker-accidental-btn" data-acc="#" title="Sharp">&#9839;</button>
+                        <button type="button" class="chord-picker-accidental-btn" data-acc="b" title="Flat">&#9837;</button>
+                    </div>
+                    <div class="chord-picker-quality">
+                        <button type="button" class="chord-picker-quality-btn" data-quality="major">Maj</button>
+                        <button type="button" class="chord-picker-quality-btn" data-quality="minor">min</button>
+                    </div>
+                    <select class="chord-picker-select" id="chordPickerSelect"></select>
+                </div>
             </div>
             <div class="two-pane">
                 <div class="sheet-pane-wrapper">
@@ -2126,6 +2202,153 @@
         }
 
         let chordNameIndex = buildChordNameIndex();
+
+        // --- Chord picker (duration popup's root/quality/dropdown row) ---
+        //
+        // Sorts a root+quality's matching chord NAMES (one per
+        // chordNameIndex entry, already deduped to a single canonical
+        // voicing) into the buckets the user asked for, in this priority
+        // order when a voicing could fit more than one (e.g. a 7sus4 has
+        // both a 7th and a sus modifier - 7ths wins since it's listed
+        // first): major triad -> minor triad -> power -> 7ths -> sus ->
+        // aug -> altered bass -> everything else (this is also where
+        // dim/dim7/m7b5 land - no dedicated bucket was asked for those).
+        const CHORD_PICKER_CATEGORY_ORDER = ['majorTriad', 'minorTriad', 'power', 'seventh', 'sus', 'aug', 'alteredBass', 'rest'];
+        const CHORD_PICKER_CATEGORY_LABELS = {
+            majorTriad: 'Major triads', minorTriad: 'Minor triads', power: 'Power chords',
+            seventh: '7ths', sus: 'Suses', aug: 'Augs', alteredBass: 'Altered bass', rest: 'The rest',
+        };
+
+        function classifyChordVoicing(voicing) {
+            const type = voicing[6];
+            const modifiers = voicing[7] || [];
+            const quality = voicing[12];
+            const name = voicing[0];
+            const intervals = voicing[3];
+            if (type === 'power') return 'power';
+            const intervalSet = new Set(intervals);
+            const isPlainTriad = intervals.length === 3 && intervalSet.has('1') && intervalSet.has('5') && !name.includes('/');
+            if (isPlainTriad && quality === 'major' && intervalSet.has('3')) return 'majorTriad';
+            if (isPlainTriad && quality === 'minor' && intervalSet.has('b3')) return 'minorTriad';
+            if (modifiers.some((m) => m.startsWith('7ths'))) return 'seventh';
+            if (modifiers.includes('sus2') || modifiers.includes('sus4')) return 'sus';
+            if (modifiers.includes('augmented')) return 'aug';
+            if (name.includes('/')) return 'alteredBass';
+            return 'rest';
+        }
+
+        // Root note, accidental ('#'/'b'/null), and quality ('major'/
+        // 'minor') the picker's own buttons are currently set to - shared
+        // by both popups since only one is ever open at a time.
+        let chordPickerRoot = 'A';
+        let chordPickerAccidental = null;
+        let chordPickerQuality = 'major';
+
+        // Every chordNameIndex name whose root matches (by pitch class,
+        // via NOTE_TO_INDEX - so picking "A#" also matches voicings
+        // spelled "Bb") the picker's current root/accidental, sorted into
+        // the category buckets above. A voicing bypasses the major/minor
+        // toggle entirely (shows under either) when it's a power chord or
+        // quality-neutral (sus2/sus4 and similar) - the picker only offers
+        // a binary Major/Minor choice, not the 4-way filter chord-
+        // diagrams.html has, so neutral chords would otherwise never
+        // appear under any toggle state at all.
+        function buildChordPickerBuckets() {
+            const rootName = chordPickerRoot + (chordPickerAccidental || '');
+            const rootIdx = NOTE_TO_INDEX[rootName];
+            const buckets = {};
+            CHORD_PICKER_CATEGORY_ORDER.forEach((c) => { buckets[c] = []; });
+            if (rootIdx == null) return buckets;
+            for (const name in chordNameIndex) {
+                const voicing = chordNameIndex[name];
+                if (NOTE_TO_INDEX[voicing[5]] !== rootIdx) continue;
+                const quality = voicing[12];
+                const bypassQuality = voicing[6] === 'power' || quality === 'neutral';
+                if (!bypassQuality && quality !== chordPickerQuality) continue;
+                buckets[classifyChordVoicing(voicing)].push(name);
+            }
+            CHORD_PICKER_CATEGORY_ORDER.forEach((c) => buckets[c].sort((a, b) => a.localeCompare(b)));
+            return buckets;
+        }
+
+        function updateChordPickerControlsUI() {
+            document.querySelectorAll('.chord-picker-root-btn').forEach((btn) => {
+                btn.classList.toggle('active', btn.dataset.root === chordPickerRoot);
+            });
+            document.querySelectorAll('.chord-picker-accidental-btn').forEach((btn) => {
+                btn.classList.toggle('active', btn.dataset.acc === chordPickerAccidental);
+            });
+            document.querySelectorAll('.chord-picker-quality-btn').forEach((btn) => {
+                btn.classList.toggle('active', btn.dataset.quality === chordPickerQuality);
+            });
+        }
+
+        function renderChordPickerSelect() {
+            const select = document.getElementById('chordPickerSelect');
+            const buckets = buildChordPickerBuckets();
+            let html = '<option value="">Pick a chord…</option>';
+            CHORD_PICKER_CATEGORY_ORDER.forEach((cat) => {
+                const names = buckets[cat];
+                if (!names.length) return;
+                html += `<optgroup label="${escapeHtml(CHORD_PICKER_CATEGORY_LABELS[cat])}">`;
+                names.forEach((name) => {
+                    html += `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
+                });
+                html += '</optgroup>';
+            });
+            select.innerHTML = html;
+        }
+
+        // Sets the picker's root/accidental/quality from an existing
+        // chord's name when its popup opens - an unrecognized name (not in
+        // chordNameIndex, e.g. hand-typed) leaves the picker at whatever
+        // it was last set to, rather than guessing.
+        function initChordPickerFromName(name) {
+            const voicing = chordNameIndex[name];
+            if (voicing) {
+                const rootField = voicing[5];
+                chordPickerRoot = rootField[0].toUpperCase();
+                chordPickerAccidental = rootField.length > 1 ? rootField[1] : null;
+                if (voicing[12] === 'major' || voicing[12] === 'minor') chordPickerQuality = voicing[12];
+            } else {
+                const m = name.match(/^([A-G])([#b]?)/);
+                if (m) {
+                    chordPickerRoot = m[1];
+                    chordPickerAccidental = m[2] || null;
+                }
+            }
+            updateChordPickerControlsUI();
+            renderChordPickerSelect();
+        }
+
+        document.querySelectorAll('.chord-picker-root-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                chordPickerRoot = btn.dataset.root;
+                updateChordPickerControlsUI();
+                renderChordPickerSelect();
+            });
+        });
+        document.querySelectorAll('.chord-picker-accidental-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                chordPickerAccidental = chordPickerAccidental === btn.dataset.acc ? null : btn.dataset.acc;
+                updateChordPickerControlsUI();
+                renderChordPickerSelect();
+            });
+        });
+        document.querySelectorAll('.chord-picker-quality-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                chordPickerQuality = btn.dataset.quality;
+                updateChordPickerControlsUI();
+                renderChordPickerSelect();
+            });
+        });
+        document.getElementById('chordPickerSelect').addEventListener('change', (e) => {
+            const name = e.target.value;
+            if (!name) return;
+            document.getElementById('durationPopupChord').value = name;
+            commitDurationPopupChordName();
+            e.target.selectedIndex = 0;
+        });
 
         // Every voicing for every chord name (buildChordNameIndex only
         // keeps one, the canonical pick) - used by the legend to let the
@@ -5986,6 +6209,7 @@
         function showDurationPopup(targetEl, lineIdx, chordIdx, mode) {
             durationPopupState = { lineIdx, chordIdx, mode };
             document.getElementById('durationPopupChord').value = targetEl.textContent;
+            initChordPickerFromName(targetEl.textContent);
 
             const showStepper = mode === 'tagged';
             document.getElementById('durationPopupMinus').style.display = showStepper ? '' : 'none';
