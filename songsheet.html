@@ -6260,8 +6260,53 @@
         document.getElementById('durationPopupMinus').addEventListener('click', () => stepDurationPopup(-CHORD_DURATION_STEP));
         document.getElementById('durationPopupPlus').addEventListener('click', () => stepDurationPopup(CHORD_DURATION_STEP));
         document.getElementById('durationPopupChord').addEventListener('change', commitDurationPopupChordName);
+        // Swaps just the root's letter (+ optional accidental), keeping
+        // whatever quality/suffix is already typed (e.g. "C7sus4") -
+        // rather than requiring a click out to the root/accidental buttons
+        // below. `forceMinor` (Ctrl+<letter>) also strips any existing
+        // major/minor marker on the suffix first ("Cmaj7" or "Cm7" ->
+        // "Am7") and reinserts a plain "m", so it doesn't stack into
+        // "Amajm7".
+        function applyRootLetterShortcut(input, letter, forceMinor, accidental) {
+            let rest = input.value.replace(/^[A-G][#b]?/, '');
+            if (forceMinor) {
+                if (/^maj/i.test(rest)) rest = rest.slice(3);
+                else if (/^m(?!aj)/.test(rest)) rest = rest.slice(1);
+                rest = 'm' + rest;
+            }
+            input.value = letter + (accidental || '') + rest;
+            chordPickerRoot = letter;
+            chordPickerAccidental = accidental || null;
+            if (forceMinor) chordPickerQuality = 'minor';
+            updateChordPickerControlsUI();
+            renderChordPickerSelect();
+            commitDurationPopupChordName();
+            input.select();
+        }
+
         document.getElementById('durationPopupChord').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') e.target.blur();
+            if (e.key === 'Enter') { e.target.blur(); return; }
+            if (e.metaKey) return;
+            // e.code (physical key position, e.g. "KeyC"), not e.key - on
+            // Mac, holding Option remaps e.key to whatever special
+            // character that Option+letter types under the active
+            // keyboard layout (Option+C -> "ç" on a US layout, not
+            // "c"), so e.key can't be trusted once Alt is one of the held
+            // modifiers (see the Ctrl+Alt+V/C/B/T section-wrap shortcut
+            // above for the same issue). e.code ignores modifiers/layout
+            // entirely and works the same whether or not Alt is held.
+            const m = /^Key([A-G])$/.exec(e.code);
+            if (!m) return;
+            // Shift = major (root swap only), Ctrl = minor; either one
+            // alone, or with Alt/Option also held, adds a sharp to the new
+            // root. Plain Alt+letter with neither Shift nor Ctrl isn't one
+            // of these shortcuts - left alone so the browser's own Option-
+            // key character input (or nothing) still happens.
+            const forceMinor = e.ctrlKey;
+            const forceMajor = e.shiftKey;
+            if (forceMinor === forceMajor) return; // neither, or both (ambiguous) - not our shortcut
+            e.preventDefault();
+            applyRootLetterShortcut(e.target, m[1], forceMinor, e.altKey ? '#' : null);
         });
         document.getElementById('durationPopupDelete').addEventListener('click', () => {
             if (!durationPopupState) return;
