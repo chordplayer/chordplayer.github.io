@@ -6225,6 +6225,13 @@
             const popup = document.getElementById('durationPopup');
             popup.style.display = 'flex';
             positionDurationPopup(targetEl);
+            // Focus + select so the root-letter shortcuts (Shift/Ctrl/Alt
+            // + A-G, which listen on this field specifically) work the
+            // instant the popup opens, not only after manually clicking
+            // into the name field first.
+            const nameInput = document.getElementById('durationPopupChord');
+            nameInput.focus();
+            nameInput.select();
         }
 
         function hideDurationPopup() {
@@ -6306,6 +6313,11 @@
             const forceMajor = e.shiftKey;
             if (forceMinor === forceMajor) return; // neither, or both (ambiguous) - not our shortcut
             e.preventDefault();
+            // Ctrl+Alt+C is also the global "wrap in Chorus" shortcut
+            // (document-level keydown listener, below) - stopPropagation
+            // keeps that from also firing (and popping its "select lines
+            // first" alert) while this field is focused.
+            e.stopPropagation();
             applyRootLetterShortcut(e.target, m[1], forceMinor, e.altKey ? '#' : null);
         });
         document.getElementById('durationPopupDelete').addEventListener('click', () => {
@@ -6449,12 +6461,7 @@
                 const targetChordIdx = findInsertionGap(lineIdx, e.clientX);
                 insertChordAt(lineIdx, targetChordIdx, e.clientX);
                 const newTarget = document.querySelector(`#sheetPane .chord-label[data-line-idx="${lineIdx}"][data-chord-idx="${targetChordIdx}"]`);
-                if (newTarget) {
-                    showDurationPopup(newTarget, lineIdx, targetChordIdx, 'tagged');
-                    const nameInput = document.getElementById('durationPopupChord');
-                    nameInput.focus();
-                    nameInput.select();
-                }
+                if (newTarget) showDurationPopup(newTarget, lineIdx, targetChordIdx, 'tagged');
             } else {
                 // Shift-click directly on the lyric text (no separate tick
                 // row in the Source view) inserts a new chord at that exact
@@ -6471,12 +6478,7 @@
                 const newChordIdx = insertSourceChordAt(lineIdx, wrapStart + offset, copiedSourceChordName || 'C');
                 if (newChordIdx == null) return;
                 const newTarget = document.querySelector(`#sheetPane .chord-label[data-line-idx="${lineIdx}"][data-chord-idx="${newChordIdx}"]`);
-                if (newTarget) {
-                    showDurationPopup(newTarget, lineIdx, newChordIdx, 'source');
-                    const nameInput = document.getElementById('durationPopupChord');
-                    nameInput.focus();
-                    nameInput.select();
-                }
+                if (newTarget) showDurationPopup(newTarget, lineIdx, newChordIdx, 'source');
             }
         });
 
