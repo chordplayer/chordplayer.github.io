@@ -2599,7 +2599,7 @@
             return buckets;
         }
 
-        function buildEvenGridHTML(lt, lineIdx, maxChars) {
+        function buildEvenGridHTML(lt, lineIdx, maxChars, forPrint) {
             const measuresSpanned = lt.measureEnd - lt.measureStart;
             const totalQuarters = Math.round(measuresSpanned * 4);
 
@@ -2646,7 +2646,14 @@
                 });
                 html += '</div>';
                 html += '</div>';
-                html += '<div class="sheet-lyric">&nbsp;</div>';
+                // This function only ever runs for a chord-only line (no
+                // lyric text at all - see the lt.hasLyric check at the
+                // call site), so the blank placeholder row below the
+                // chords is pure wasted vertical space in print (an
+                // intro/instrumental break shouldn't cost a whole extra
+                // blank line on the page) - kept on screen since the app
+                // doesn't otherwise need this exact suppression there.
+                if (!forPrint) html += '<div class="sheet-lyric">&nbsp;</div>';
                 html += '</div>';
                 out += html;
             }
@@ -2839,7 +2846,7 @@
             });
         }
 
-        function buildClassicLineHTML(line, lineIdx, maxChars) {
+        function buildClassicLineHTML(line, lineIdx, maxChars, forPrint) {
             const ranges = wrapTextRanges(line.lyric, maxChars);
             const sorted = [...line.chords].sort((a, b) => a.index - b.index);
             const displayIndexes = computeChordDisplayIndexes(sorted);
@@ -2857,7 +2864,16 @@
                 }
                 html += '</div>';
                 html += '</div>';
-                html += `<div class="sheet-lyric">${segLyric ? escapeHtml(segLyric) : '&nbsp;'}</div>`;
+                // In print, an intro/instrumental line - chords with no
+                // real lyric text at all under them, just the whitespace
+                // between the brackets - skips the blank placeholder row
+                // entirely rather than costing a wasted blank line on the
+                // page. Kept on screen: it's still the click target
+                // shift-click-insert needs to add more chords to this
+                // line (see resolveLyricCharIndex).
+                if (segLyric.trim() || !forPrint) {
+                    html += `<div class="sheet-lyric">${segLyric ? escapeHtml(segLyric) : '&nbsp;'}</div>`;
+                }
                 html += '</div>';
                 out += html;
             });
@@ -2920,7 +2936,7 @@
             return maxChars;
         }
 
-        function buildSongHTML(song, timing, markTime, maxChars) {
+        function buildSongHTML(song, timing, markTime, maxChars, forPrint) {
             let html = '<div class="sheet-header">';
             if (song.title) html += `<div class="sheet-title">${escapeHtml(song.title)}</div>`;
             if (song.subtitle) html += `<div class="sheet-subtitle">${escapeHtml(song.subtitle)}</div>`;
@@ -3003,10 +3019,10 @@
                                 if (lt.hasLyric) {
                                     html += buildLyricAnchoredGridHTML(line, lt.chordPositions, gridTicksByLine.get(lineIdx) || [], lineIdx, maxChars);
                                 } else {
-                                    html += buildEvenGridHTML(lt, lineIdx, maxChars);
+                                    html += buildEvenGridHTML(lt, lineIdx, maxChars, forPrint);
                                 }
                             } else {
-                                html += buildClassicLineHTML(line, lineIdx, maxChars);
+                                html += buildClassicLineHTML(line, lineIdx, maxChars, forPrint);
                             }
                         } else {
                             // No chords at all on this line - no character-
@@ -3385,7 +3401,7 @@
             if (showSheet) {
                 // maxChars=0: no word-wrapping - every source line stays on
                 // its own physical line (see getPrintFontSizePt).
-                const printHTML = buildSongHTML(displaySong, timing, markTime, 0);
+                const printHTML = buildSongHTML(displaySong, timing, markTime, 0, true);
                 document.getElementById('printBody').innerHTML = printHTML;
                 const includeDiagrams = document.getElementById('printDiagramsCheck').checked;
                 printSheet.classList.toggle('no-legend', !includeDiagrams);
@@ -6355,7 +6371,21 @@
             let left = rect.left + rect.width / 2 - popupRect.width / 2;
             left = Math.max(4, Math.min(left, window.innerWidth - popupRect.width - 4));
             popup.style.left = `${left}px`;
-            popup.style.top = `${rect.bottom + 6}px`;
+
+            // Below the chord is preferred (original behavior), but the
+            // popup grew a full second row once the chord picker was
+            // added - for a chord in the lower half of the screen, "below"
+            // can now push that row (the root/accidental/quality buttons)
+            // past the bottom of the viewport: still in the DOM, but
+            // genuinely unreachable with the mouse. Flip above the chord
+            // instead when there's not enough room below but there is
+            // above; a final clamp handles the (rare) case where the
+            // window is too short for either.
+            const fitsBelow = rect.bottom + 6 + popupRect.height <= window.innerHeight;
+            const fitsAbove = rect.top - 6 - popupRect.height >= 0;
+            let top = (fitsBelow || !fitsAbove) ? rect.bottom + 6 : rect.top - 6 - popupRect.height;
+            top = Math.max(4, Math.min(top, window.innerHeight - popupRect.height - 4));
+            popup.style.top = `${top}px`;
         }
 
         // mode 'tagged' shows the -/+ duration stepper (a source chord has
@@ -6380,10 +6410,8 @@
             const popup = document.getElementById('durationPopup');
             popup.style.display = 'flex';
             positionDurationPopup(targetEl);
-            // Focus + select so the root-letter shortcuts (Shift/Ctrl/Alt
-            // + A-G, which listen on this field specifically) work the
-            // instant the popup opens, not only after manually clicking
-            // into the name field first.
+            // Focus + select so the name field is ready to type over
+            // immediately, without an extra click into it first.
             const nameInput = document.getElementById('durationPopupChord');
             nameInput.focus();
             nameInput.select();
