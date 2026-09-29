@@ -2311,21 +2311,29 @@
                 chordPickerAccidental = rootField.length > 1 ? rootField[1] : null;
                 if (voicing[12] === 'major' || voicing[12] === 'minor') chordPickerQuality = voicing[12];
             } else {
+                // Only A-G is a real root letter - anything else (an
+                // empty/odd custom name, a name starting with a number,
+                // etc.) defaults the picker back to plain C rather than
+                // leaving it at whatever it was previously showing.
                 const m = name.match(/^([A-G])([#b]?)/);
-                if (m) {
-                    chordPickerRoot = m[1];
-                    chordPickerAccidental = m[2] || null;
-                }
+                chordPickerRoot = m ? m[1] : 'C';
+                chordPickerAccidental = m ? (m[2] || null) : null;
             }
             updateChordPickerControlsUI();
             renderChordPickerSelect();
         }
 
+        // Clicking any of root/accidental/quality both refreshes the
+        // dropdown's option list AND rewrites+commits the popup's current
+        // chord to match (see applyChordPickerState) - so the chord on the
+        // sheet updates live as you click through the picker, not just
+        // when you finally pick a dropdown option.
         document.querySelectorAll('.chord-picker-root-btn').forEach((btn) => {
             btn.addEventListener('click', () => {
                 chordPickerRoot = btn.dataset.root;
                 updateChordPickerControlsUI();
                 renderChordPickerSelect();
+                applyChordPickerState();
             });
         });
         document.querySelectorAll('.chord-picker-accidental-btn').forEach((btn) => {
@@ -2333,6 +2341,7 @@
                 chordPickerAccidental = chordPickerAccidental === btn.dataset.acc ? null : btn.dataset.acc;
                 updateChordPickerControlsUI();
                 renderChordPickerSelect();
+                applyChordPickerState();
             });
         });
         document.querySelectorAll('.chord-picker-quality-btn').forEach((btn) => {
@@ -2340,6 +2349,7 @@
                 chordPickerQuality = btn.dataset.quality;
                 updateChordPickerControlsUI();
                 renderChordPickerSelect();
+                applyChordPickerState();
             });
         });
         document.getElementById('chordPickerSelect').addEventListener('change', (e) => {
@@ -6267,59 +6277,37 @@
         document.getElementById('durationPopupMinus').addEventListener('click', () => stepDurationPopup(-CHORD_DURATION_STEP));
         document.getElementById('durationPopupPlus').addEventListener('click', () => stepDurationPopup(CHORD_DURATION_STEP));
         document.getElementById('durationPopupChord').addEventListener('change', commitDurationPopupChordName);
-        // Swaps just the root's letter (+ optional accidental), keeping
-        // whatever quality/suffix is already typed (e.g. "C7sus4") -
-        // rather than requiring a click out to the root/accidental buttons
-        // below. `forceMinor` (Ctrl+<letter>) also strips any existing
-        // major/minor marker on the suffix first ("Cmaj7" or "Cm7" ->
-        // "Am7") and reinserts a plain "m", so it doesn't stack into
-        // "Amajm7".
-        function applyRootLetterShortcut(input, letter, forceMinor, accidental) {
-            let rest = input.value.replace(/^[A-G][#b]?/, '');
-            if (forceMinor) {
-                if (/^maj/i.test(rest)) rest = rest.slice(3);
-                else if (/^m(?!aj)/.test(rest)) rest = rest.slice(1);
-                rest = 'm' + rest;
+        document.getElementById('durationPopupChord').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') e.target.blur();
+        });
+
+        // Strips whatever quality marker (if any) the CURRENT text starts
+        // with after its root, so applyChordPickerState can cleanly
+        // reapply the picker's own quality state on top - "maj" is only
+        // stripped when heading TO minor (it's a major-7 marker, not a
+        // "this chord is major" marker, so heading TO major leaves it
+        // alone - Cmaj7 stays Cmaj7 if Major is clicked while it's already
+        // major, rather than getting mangled into C7).
+        function stripExistingQualityMarker(rest, targetQuality) {
+            if (targetQuality === 'minor') {
+                if (/^maj/i.test(rest)) return rest.slice(3);
+                if (/^m(?!aj)/.test(rest)) return rest.slice(1);
+                return rest;
             }
-            input.value = letter + (accidental || '') + rest;
-            chordPickerRoot = letter;
-            chordPickerAccidental = accidental || null;
-            if (forceMinor) chordPickerQuality = 'minor';
-            updateChordPickerControlsUI();
-            renderChordPickerSelect();
-            commitDurationPopupChordName();
-            input.select();
+            return /^m(?!aj)/.test(rest) ? rest.slice(1) : rest;
         }
 
-        document.getElementById('durationPopupChord').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.target.blur(); return; }
-            if (e.metaKey) return;
-            // e.code (physical key position, e.g. "KeyC"), not e.key - on
-            // Mac, holding Option remaps e.key to whatever special
-            // character that Option+letter types under the active
-            // keyboard layout (Option+C -> "ç" on a US layout, not
-            // "c"), so e.key can't be trusted once Alt is one of the held
-            // modifiers (see the Ctrl+Alt+V/C/B/T section-wrap shortcut
-            // above for the same issue). e.code ignores modifiers/layout
-            // entirely and works the same whether or not Alt is held.
-            const m = /^Key([A-G])$/.exec(e.code);
-            if (!m) return;
-            // Shift = major (root swap only), Ctrl = minor; either one
-            // alone, or with Alt/Option also held, adds a sharp to the new
-            // root. Plain Alt+letter with neither Shift nor Ctrl isn't one
-            // of these shortcuts - left alone so the browser's own Option-
-            // key character input (or nothing) still happens.
-            const forceMinor = e.ctrlKey;
-            const forceMajor = e.shiftKey;
-            if (forceMinor === forceMajor) return; // neither, or both (ambiguous) - not our shortcut
-            e.preventDefault();
-            // Ctrl+Alt+C is also the global "wrap in Chorus" shortcut
-            // (document-level keydown listener, below) - stopPropagation
-            // keeps that from also firing (and popping its "select lines
-            // first" alert) while this field is focused.
-            e.stopPropagation();
-            applyRootLetterShortcut(e.target, m[1], forceMinor, e.altKey ? '#' : null);
-        });
+        // Rewrites the popup's name field (and commits it) from the
+        // picker's current root/accidental/quality state, keeping
+        // whatever extension suffix (e.g. "7", "sus4") was already there -
+        // called whenever a root/accidental/quality button is clicked.
+        function applyChordPickerState() {
+            if (!durationPopupState) return;
+            const input = document.getElementById('durationPopupChord');
+            const rest = stripExistingQualityMarker(input.value.replace(/^[A-G][#b]?/, ''), chordPickerQuality);
+            input.value = chordPickerRoot + (chordPickerAccidental || '') + (chordPickerQuality === 'minor' ? 'm' : '') + rest;
+            commitDurationPopupChordName();
+        }
         document.getElementById('durationPopupDelete').addEventListener('click', () => {
             if (!durationPopupState) return;
             const { lineIdx, chordIdx, mode } = durationPopupState;
