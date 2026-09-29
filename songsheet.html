@@ -1550,7 +1550,7 @@
                 <span id="transposeOffsetLabel">+0</span>
             </div>
             <div class="chord-duration-control">
-                <label for="capoSelect">Capo</label>
+                <label for="capoSelect" title="Edits the song file's own {capo:} tag - doesn't change playback pitch. Use the Capo (playback) control at the bottom for that">Capo</label>
                 <select id="capoSelect">
                     <option value="0" selected>None</option>
                     <option value="1">1</option>
@@ -1714,6 +1714,19 @@
             <div class="chord-duration-control">
                 <label for="metronomeVolumeSlider">Metronome</label>
                 <input type="range" id="metronomeVolumeSlider" min="0" max="100" step="5" value="70">
+            </div>
+            <div class="chord-duration-control">
+                <label for="playbackCapoSelect" title="Shifts playback pitch only - the Capo control up top edits the song file's own {capo:} tag instead">Capo (playback)</label>
+                <select id="playbackCapoSelect">
+                    <option value="0" selected>None</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                </select>
             </div>
         </div>
         <div class="player-bar-row">
@@ -3498,8 +3511,29 @@
             const text = showTagged ? chordPlayerText : chordProText;
             if (!text || !text.trim()) return;
             currentSong = parseChordPro(text);
+            syncCapoFromSong();
             renderOutput();
             syncPaneDisplay();
+        }
+
+        // Syncs both #capoSelect (file-editing control) and
+        // #playbackCapoSelect (playback pitch-shift - see getCapo) from
+        // currentSong.capo, defaulting to "0" when the song has no
+        // {capo:} tag at all rather than leaving either at whatever it was
+        // previously showing. Called on every re-render (renderActive),
+        // so adding or editing a {capo:} tag anywhere in the Chordpro
+        // text - by hand, or via #capoSelect's own 'change' listener -
+        // takes effect immediately and re-baselines playback to match.
+        // #playbackCapoSelect stays freely adjustable in between - only
+        // the file's own capo (never the playback control) drives this
+        // sync, so tweaking playback alone never writes back to the file.
+        function syncCapoFromSong() {
+            if (!currentSong) return;
+            const capoFret = String(parseInt(currentSong.capo, 10) || 0);
+            ['capoSelect', 'playbackCapoSelect'].forEach((id) => {
+                const select = document.getElementById(id);
+                if ([...select.options].some((o) => o.value === capoFret)) select.value = capoFret;
+            });
         }
 
         // Re-tags the whole song from scratch off the unedited original
@@ -3819,11 +3853,8 @@
                 const select = document.getElementById('timeSignatureSelect');
                 if ([...select.options].some(o => o.value === numerator)) select.value = numerator;
             }
-            if (currentSong.capo) {
-                const capoFret = String(parseInt(currentSong.capo, 10));
-                const select = document.getElementById('capoSelect');
-                if ([...select.options].some(o => o.value === capoFret)) select.value = capoFret;
-            }
+            // Both capo controls are already synced by the renderActive()
+            // call at the top of this function - see syncCapoFromSong.
             if (!isScrolling && !isCountingIn) updateBeatDisplay(0, getBeatsPerMeasure());
 
             songElapsedMeasures = 0;
@@ -3871,6 +3902,7 @@
             transposeOffset = 0;
             updateTransposeOffsetLabel();
             document.getElementById('capoSelect').value = '0';
+            document.getElementById('playbackCapoSelect').value = '0';
 
             document.getElementById('rawPane').value = '';
             document.getElementById('sheetPane').innerHTML = '';
@@ -3907,6 +3939,7 @@
         const SESSION_STORAGE_KEY = 'chordplayer.session.v1';
         const PERSISTED_CONTROL_IDS = [
             'timeSignatureSelect', 'chordDurationSelect', 'simplifyToggle', 'capoSelect',
+            'playbackCapoSelect',
             'legendShowNotes', 'legendShowIntervals', 'playChordsToggle',
             'bpmSlider', 'toneSelect', 'strumPatternSelect', 'accentContrastSlider',
             'chordVolumeSlider', 'metronomeVolumeSlider', 'sustainSlider',
@@ -3986,14 +4019,15 @@
 
         // --- Save ---
         //
-        // Patches {time:}/{tempo:} into a copy of a buffer without
+        // Patches one directive (e.g. {time:}, {tempo:}, {capo:} - see the
+        // #capoSelect 'change' listener) into a copy of a buffer without
         // re-parsing (re-parsing+rebuilding would discard any in-progress
         // {x_cpl_m:} edits sitting in chordPlayerText) - replaces an
         // existing directive line in place, or inserts a new one after the
         // file's leading block of header directives (title/artist/key/
-        // etc.) if the file has none yet. {key:}/{capo:} are deliberately
-        // left alone - there's no UI control for either, so the app never
-        // has an opinion to write for them.
+        // etc.) if the file has none yet. {key:} is the one header field
+        // deliberately left alone - there's no UI control for it, so the
+        // app never has an opinion to write for it.
         function upsertDirective(text, name, value) {
             const lines = text.split(/\r?\n/);
             const directiveRe = new RegExp(`^\\{${name}(?::.*)?\\}$`, 'i');
@@ -4369,10 +4403,15 @@
 
         // Semitones a physical capo at this fret would raise the pitch -
         // unlike Transpose, this never touches the chord names/shapes
-        // themselves (see #capoSelect and playChord's `capo` param in
-        // chord-data.js), only what actually sounds.
+        // themselves (see #playbackCapoSelect and playChord's `capo` param
+        // in chord-data.js), only what actually sounds. Deliberately reads
+        // #playbackCapoSelect (in the bottom player bar), not #capoSelect
+        // (top ChordPlayer controls, which only edits the song file's own
+        // {capo:} tag - see its 'change' listener) - the two used to be
+        // the same control doing double duty, which meant editing the
+        // file's capo tag silently changed what you heard too.
         function getCapo() {
-            return parseInt(document.getElementById('capoSelect').value, 10) || 0;
+            return parseInt(document.getElementById('playbackCapoSelect').value, 10) || 0;
         }
 
         function playChordByName(name, direction = 'down', accent = false) {
@@ -5450,6 +5489,22 @@
 
         document.getElementById('timeSignatureSelect').addEventListener('change', () => {
             if (!isScrolling && !isCountingIn) updateBeatDisplay(0, getBeatsPerMeasure());
+        });
+
+        // The reverse direction of syncCapoFromSong: picking a capo from
+        // this control writes it straight into both buffers' {capo:} tag
+        // (the same upsertDirective patch buildPatchedSource/
+        // buildPatchedTagged already apply at save time - see
+        // deriveBaseName's callers), rather than only taking effect once
+        // you save. renderActive() then re-parses, which calls
+        // syncCapoFromSong right back - a no-op since it already matches
+        // what was just picked, not a fight over the value.
+        document.getElementById('capoSelect').addEventListener('change', () => {
+            if (!sourceLoaded) return;
+            const value = document.getElementById('capoSelect').value;
+            chordProText = upsertDirective(chordProText, 'capo', value);
+            if (chordPlayerText) chordPlayerText = upsertDirective(chordPlayerText, 'capo', value);
+            renderActive();
         });
 
         updateBeatDisplay(0, getBeatsPerMeasure());
