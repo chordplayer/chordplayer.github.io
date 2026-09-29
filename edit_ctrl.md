@@ -37,6 +37,8 @@ Duration popup (opened by clicking a chord):
 | Drag a chord left/right | Moves it to a different character position on the same line |
 | Hover a chord (no click needed) + Cmd/Ctrl+C | Copies that chord's name into an in-app clipboard |
 
-Popup here has no −/+ duration stepper (plain ChordPro has no duration) — just the name field and Delete. Emptying the name (instead of leaving a blank chord) deletes it outright.
+Popup here has no −/+ duration stepper (plain ChordPro has no duration) — just the name field, and a chord picker (root A–G buttons, ♯/♭ toggle, Maj/min toggle, and a dropdown of matching chord names grouped by category) that rewrites the name field live as you click it. Emptying the name (instead of leaving a blank chord) deletes it outright.
 
-**Copy/paste across lines:** hover any chord and press Cmd/Ctrl+C to copy its name (no need to click first), then Shift-click anywhere — including a different line — to paste a new chord with that name.
+**Copy/paste one chord:** hover any chord and press Cmd/Ctrl+C to copy its name (no need to click first), then Shift-click anywhere — including a different line — to paste a new chord with that name.
+
+**Copy/paste a whole line's chords:** select (highlight) a line's lyric text, then **Ctrl+Cmd+C** (both modifiers together) to copy every chord on it. Select a different line's lyric text and **Ctrl+Cmd+V** to paste — this *replaces* that line's existing chords, positioned at the equivalent word (not exact character) on the new line, so you may need to drag individual chords afterward to fine-tune.

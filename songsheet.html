@@ -3363,7 +3363,6 @@
             // removed out from under the pointer) - a fresh pointerover
             // re-sets it if the mouse is still actually over a chord.
             hoveredSourceChord = null;
-            hoveredSourceLine = null;
             updateResumeFlashDOM();
             renderLegend();
             updatePrintOutput(displaySong, timing, markTime);
@@ -5554,16 +5553,17 @@
         let hoveredSourceChord = null; // { lineIdx, chordIdx }
         let copiedSourceChordName = null;
 
-        // Whole-line copy/paste: hovering anywhere on a line (not a
-        // specific chord - that's hoveredSourceChord above) and pressing
-        // Cmd/Ctrl+C copies every chord on it; Cmd/Ctrl+V on a hovered
-        // line then pastes them there. Positions are stored/restored as a
-        // fraction of the line's own WORD span (not syllables - there's no
-        // reliable syllable-counting algorithm for English, while word
-        // boundaries are exact) so they land in a reasonable spot on a
-        // differently-worded target line - see copyLineChords/
-        // pasteLineChords.
-        let hoveredSourceLine = null; // lineIdx
+        // Whole-line copy/paste: select (highlight) a line's lyric text -
+        // same text selection the Ctrl+Alt+V/C/B/T section-wrap shortcut
+        // reads via getSelectedLineIdxRange - then Ctrl+Cmd+C copies every
+        // chord on the first selected line; select a different line and
+        // Ctrl+Cmd+V pastes them there. Both modifiers together
+        // distinguishes this from the single-chord hover+Cmd/Ctrl+C copy
+        // above. Positions are stored/restored as a fraction of the line's
+        // own WORD span (not syllables - there's no reliable syllable-
+        // counting algorithm for English, while word boundaries are exact)
+        // so they land in a reasonable spot on a differently-worded target
+        // line - see copyLineChords/pasteLineChords.
         let copiedLineChords = null; // [{ chord, fraction }]
 
         function collectSongLines(song) {
@@ -6506,31 +6506,23 @@
         document.getElementById('sheetPane').addEventListener('pointerup', endChordDrag);
         document.getElementById('sheetPane').addEventListener('pointercancel', endChordDrag);
 
-        // Hover-to-copy: no need to click anything open first - just rest
-        // the pointer somewhere and press Cmd/Ctrl+C. Over a specific
-        // chord (the same grab-cursor chord you'd click or drag), that
-        // copies just that chord's name; anywhere else on a line, it
-        // copies every chord on the whole line (see copyLineChords).
+        // Hover-to-copy: no need to click a chord open first - just rest
+        // the pointer on it (the same grab-cursor chord you'd click or
+        // drag) and press Cmd/Ctrl+C to copy just that chord's name.
         // Source view only; the tagged ChordPlayer view has no analogous
         // copy feature.
         document.getElementById('sheetPane').addEventListener('pointerover', (e) => {
             if (document.getElementById('sourceViewTagged').checked) return;
-            const lineEl = e.target.closest('.sheet-line[data-line-idx]');
-            const lineIdx = lineEl ? parseInt(lineEl.dataset.lineIdx, 10) : NaN;
-            hoveredSourceLine = isNaN(lineIdx) ? null : lineIdx;
             const target = e.target.closest('.chord-label');
             if (!target) { hoveredSourceChord = null; return; }
-            const chordLineIdx = parseInt(target.dataset.lineIdx, 10);
+            const lineIdx = parseInt(target.dataset.lineIdx, 10);
             const chordIdx = parseInt(target.dataset.chordIdx, 10);
-            if (isNaN(chordLineIdx) || isNaN(chordIdx)) return;
-            hoveredSourceChord = { lineIdx: chordLineIdx, chordIdx };
+            if (isNaN(lineIdx) || isNaN(chordIdx)) return;
+            hoveredSourceChord = { lineIdx, chordIdx };
         });
         document.getElementById('sheetPane').addEventListener('pointerout', (e) => {
             if (e.target.closest('.chord-label') && !e.relatedTarget?.closest?.('.chord-label')) {
                 hoveredSourceChord = null;
-            }
-            if (e.target.closest('.sheet-line[data-line-idx]') && !e.relatedTarget?.closest?.('.sheet-line[data-line-idx]')) {
-                hoveredSourceLine = null;
             }
         });
 
@@ -6540,19 +6532,36 @@
             if (key !== 'c' && key !== 'v') return;
             const tag = document.activeElement && document.activeElement.tagName;
             if (tag === 'INPUT' || tag === 'TEXTAREA') return; // let normal text copy/paste through
-            if (key === 'c') {
-                if (hoveredSourceChord) {
-                    const found = findSourceChord(hoveredSourceChord.lineIdx, hoveredSourceChord.chordIdx);
-                    if (found) {
-                        copiedSourceChordName = found.chord.chord;
-                        flashCopyFeedback(hoveredSourceChord.lineIdx, [hoveredSourceChord.chordIdx]);
-                    }
-                } else if (hoveredSourceLine != null) {
-                    copyLineChords(hoveredSourceLine);
-                    flashCopyFeedback(hoveredSourceLine, null);
+            if (document.getElementById('sourceViewTagged').checked) return;
+
+            // Ctrl+Cmd+C/V (both modifiers together, distinguishing this
+            // from the single-chord hover+Cmd/Ctrl+C above): select a
+            // line's lyric text - the same selection
+            // getSelectedLineIdxRange already reads for the section-wrap
+            // shortcut - to copy/paste that WHOLE line's chords. A
+            // multi-line selection uses just its first line.
+            if (e.metaKey && e.ctrlKey) {
+                const range = getSelectedLineIdxRange();
+                if (!range) {
+                    alert('Select (highlight) a line’s lyrics first, then use this shortcut.');
+                    return;
                 }
-            } else if (hoveredSourceLine != null) {
-                pasteLineChords(hoveredSourceLine);
+                e.preventDefault();
+                if (key === 'c') {
+                    copyLineChords(range.start);
+                    flashCopyFeedback(range.start, null);
+                } else {
+                    pasteLineChords(range.start);
+                }
+                return;
+            }
+
+            if (key === 'c' && hoveredSourceChord) {
+                const found = findSourceChord(hoveredSourceChord.lineIdx, hoveredSourceChord.chordIdx);
+                if (found) {
+                    copiedSourceChordName = found.chord.chord;
+                    flashCopyFeedback(hoveredSourceChord.lineIdx, [hoveredSourceChord.chordIdx]);
+                }
             }
         });
 
