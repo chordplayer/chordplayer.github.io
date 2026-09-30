@@ -52,6 +52,26 @@ a file gets migrated to the new names the moment anything in it is
 edited (any edit re-serializes the whole song), not merely by loading
 or re-saving it untouched.
 
+### Bar markers: `[|]`
+
+Not a directive - a bracket holding only `|` is a measure-line marker, not a
+chord. Standard ChordPro has no bar marker for lyric lines (only `{start_of_grid}`
+blocks), and a reader that doesn't know about it just shows `|` as an odd chord
+name, so files stay readable elsewhere. `parseChordPro()` lifts it out of the
+chord list entirely - it has no timing, isn't played, isn't in the legend, and
+is left alone by transpose.
+
+| Written | Drawn |
+|---|---|
+| `[|][G]` (bar directly before a chord) | one column left of `G` (moves back) |
+| `[C][|]` (bar directly after a chord) | just past `C`'s name |
+| `[|]` anywhere else (next to lyrics, or at end of line) | at its own lyric position |
+
+A bar before/after a chord travels with that chord when it's dragged or edited
+(deleting the chord deletes its bar). Songs containing any bar reserve a 1ch left
+gutter on every row so a bar before a line's first chord isn't clipped. Only
+single `|` is recognized for now; `||`, repeats etc. are not.
+
 `{define:}` itself is standard ChordPro (see the table above), but what
 `songsheet.html` does with it is ChordPlayer-specific: on load, any
 `{define:}` name not already in `chordData` is computed into a session-only

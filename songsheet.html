@@ -1026,6 +1026,27 @@
         cursor: text;
     }
 
+    /* [|] bar marker - see computeBarPlacements. Not interactive; sits on
+       the chord row like a chord label but takes no layout width. */
+    .bar-mark {
+        position: absolute;
+        top: 0;
+        font-weight: 700;
+        color: #666;
+        white-space: nowrap;
+        pointer-events: none;
+    }
+
+    /* Songs containing bars reserve a 1ch left gutter so a bar before a
+       line's first chord (drawn one column left of it) isn't clipped;
+       applied to every row so lyrics and chords stay aligned with each
+       other across all lines. */
+    .sheet-section.has-bars .sheet-grid,
+    .sheet-section.has-bars .sheet-grid-classic,
+    .sheet-section.has-bars .sheet-lyric {
+        margin-left: 1ch;
+    }
+
     .chord-label {
         position: absolute;
         top: 0;
@@ -1463,7 +1484,7 @@
         .sheet-lyric {
             font-weight: 700;
         }
-        .chord-label, .sheet-chords {
+        .chord-label, .bar-mark, .sheet-chords {
             font-weight: 700;
             -webkit-text-stroke: 0.4px currentColor;
         }
@@ -1483,6 +1504,7 @@
         .print-sheet.print-bw .sheet-lyric,
         .print-sheet.print-bw .sheet-chords,
         .print-sheet.print-bw .chord-label,
+        .print-sheet.print-bw .bar-mark,
         .print-sheet.print-bw .legend-chord-name,
         .print-sheet.print-bw .legend-intervals,
         .print-sheet.print-bw .legend-missing {
@@ -1891,6 +1913,30 @@
             return { name, baseFret, frets };
         }
 
+        // Bar (measure-line) markers: a bracket holding only "|". Not part
+        // of standard ChordPro (a renderer there would show it as an odd
+        // chord name), so parseChordPro lifts it out of the chord list -
+        // see the [|] branch there and CHORDPRO_TAGS.md.
+        const BAR_RE = /^\|$/;
+
+        function lineBars(line) {
+            return line.bars || [];
+        }
+
+        function lineHasBars(line) {
+            return lineBars(line).length > 0 || line.chords.some((c) => c.barBefore || c.barAfter);
+        }
+
+        function songHasBars(song) {
+            return song.sections.some((section) => section.lines.some((line) => line.type === 'line' && lineHasBars(line)));
+        }
+
+        // A chordless line carrying only free bars still needs the chord-
+        // row treatment, but only if it has real lyric text to sit over.
+        function lineHasFreeBarsOnly(line) {
+            return lineBars(line).length > 0 && line.lyric.trim().length > 0;
+        }
+
         function parseChordPro(text) {
             const lines = text.split(/\r?\n/);
             const song = { title: '', subtitle: '', artist: '', key: '', capo: '', time: '', tempo: '', videoUrl: '', customDefines: [], sections: [] };
@@ -2000,9 +2046,11 @@
                 }
 
                 const chords = [];
+                const bars = [];
                 let lyric = '';
                 let i = 0;
                 let pendingInlineMeasureDuration = null;
+                let pendingBarBefore = null;
                 while (i < line.length) {
                     if (line[i] === '{') {
                         const end = line.indexOf('}', i);
@@ -2021,8 +2069,39 @@
                     if (line[i] === '[') {
                         const end = line.indexOf(']', i);
                         if (end !== -1) {
-                            chords.push({ chord: line.slice(i + 1, end), index: lyric.length, measureDuration: pendingInlineMeasureDuration });
+                            const content = line.slice(i + 1, end);
+                            if (BAR_RE.test(content)) {
+                                // A [|] bar marker is never a chord - it
+                                // stays out of line.chords entirely, so
+                                // timing/playback/legend/transpose never
+                                // see it. Directly followed (same lyric
+                                // position, any {x_cpl_m:} tag skipped) by
+                                // a real chord -> that chord's barBefore;
+                                // else directly after a chord -> its
+                                // barAfter; else a free bar in line.bars.
+                                let j = end + 1;
+                                while (line[j] === '{') {
+                                    const close = line.indexOf('}', j);
+                                    if (close === -1) break;
+                                    j = close + 1;
+                                }
+                                let nextIsChord = false;
+                                if (line[j] === '[') {
+                                    const end2 = line.indexOf(']', j);
+                                    nextIsChord = end2 !== -1 && !BAR_RE.test(line.slice(j + 1, end2));
+                                }
+                                const prev = chords[chords.length - 1];
+                                if (nextIsChord) pendingBarBefore = content;
+                                else if (prev && prev.index === lyric.length && !prev.barAfter) prev.barAfter = content;
+                                else bars.push({ text: content, index: lyric.length });
+                                i = end + 1;
+                                continue;
+                            }
+                            const chordObj = { chord: content, index: lyric.length, measureDuration: pendingInlineMeasureDuration };
+                            if (pendingBarBefore) chordObj.barBefore = pendingBarBefore;
+                            chords.push(chordObj);
                             pendingInlineMeasureDuration = null;
+                            pendingBarBefore = null;
                             i = end + 1;
                             continue;
                         }
@@ -2030,7 +2109,7 @@
                     lyric += line[i];
                     i++;
                 }
-                currentSection.lines.push({ type: 'line', lyric, chords, _rawLine: rawIdx });
+                currentSection.lines.push({ type: 'line', lyric, chords, bars, _rawLine: rawIdx });
             }
             pushSection();
             if (!song.time) song.time = '4/4';
@@ -2081,7 +2160,7 @@
                     chords.forEach((c) => {
                         const pos = cursor;
                         const duration = c.measureDuration != null ? c.measureDuration : chordDurationMeasures;
-                        chordPositions.push({ charIndex: c.index, chord: c.chord, measurePosition: pos, measureDuration: duration });
+                        chordPositions.push({ charIndex: c.index, chord: c.chord, measurePosition: pos, measureDuration: duration, barBefore: c.barBefore, barAfter: c.barAfter });
                         cursor = pos + duration;
                     });
 
@@ -2172,7 +2251,7 @@
 
                     const lt = timing.lineTimings[ti];
                     ti++;
-                    if (!lt || !lt.chordPositions.length) {
+                    if (!lt || (!lt.chordPositions.length && !lineBars(line).length)) {
                         out.push(line.lyric);
                         continue;
                     }
@@ -2189,13 +2268,31 @@
                     // character position, so this is what actually
                     // gives them visual breathing room. Gaps with real
                     // word text are left untouched.
+                    //
+                    // Free [|] bars (see parseChordPro) are merged in by
+                    // lyric position; a chord's own barBefore/barAfter
+                    // wrap its tag + bracket so they stay attached.
+                    const tokens = [
+                        ...lineBars(line).map((b) => ({ kind: 'bar', index: b.index, text: b.text })),
+                        ...lt.chordPositions.map((cp) => ({ kind: 'chord', index: cp.charIndex, cp })),
+                    ].sort((a, b) => a.index - b.index || (a.kind === b.kind ? 0 : a.kind === 'bar' ? -1 : 1));
                     let rebuilt = '';
                     let cursor = 0;
-                    lt.chordPositions.forEach((cp, j) => {
-                        const gap = line.lyric.slice(cursor, cp.charIndex);
-                        rebuilt += (j > 0 && gap.trim() === '') ? ORPHAN_CHORD_PAD : gap;
-                        rebuilt += `{x_cpl_m: ${formatMeasureTag(cp.measureDuration)}}[${cp.chord}]`;
-                        cursor = cp.charIndex;
+                    let prevWasChord = false;
+                    tokens.forEach((t) => {
+                        const gap = line.lyric.slice(cursor, t.index);
+                        if (t.kind === 'bar') {
+                            rebuilt += gap + `[${t.text}]`;
+                            prevWasChord = false;
+                        } else {
+                            const cp = t.cp;
+                            rebuilt += (prevWasChord && gap.trim() === '') ? ORPHAN_CHORD_PAD : gap;
+                            if (cp.barBefore) rebuilt += `[${cp.barBefore}]`;
+                            rebuilt += `{x_cpl_m: ${formatMeasureTag(cp.measureDuration)}}[${cp.chord}]`;
+                            if (cp.barAfter) rebuilt += `[${cp.barAfter}]`;
+                            prevWasChord = true;
+                        }
+                        cursor = t.index;
                     });
                     rebuilt += line.lyric.slice(cursor);
                     out.push(rebuilt);
@@ -2612,6 +2709,43 @@
             return buckets;
         }
 
+        // --- Bar markers ([|]) ---
+        //
+        // Drawn as plain .bar-mark spans on the chord row, taking no layout
+        // width (absolutely positioned like .chord-label) so they never
+        // push chords apart. A barBefore sits one character left of its
+        // chord (into the 1ch gutter .has-bars adds, when it's the first
+        // thing on the line); a barAfter sits just past its chord's name;
+        // a free bar sits at its own lyric position. `items` is one entry
+        // per chord: { name, barBefore, barAfter, pos } with pos being
+        // that chord's own "ch" position in the full (unwrapped) lyric.
+        function computeBarPlacements(line, items) {
+            const placements = [];
+            for (const it of items) {
+                if (it.barBefore) placements.push({ text: it.barBefore, pos: it.pos - 1, anchor: it.pos });
+                if (it.barAfter) placements.push({ text: it.barAfter, pos: it.pos + Math.max(it.name.length, 1), anchor: it.pos });
+            }
+            for (const b of lineBars(line)) placements.push({ text: b.text, pos: b.index, anchor: b.index });
+            return placements;
+        }
+
+        // Buckets placements into wrapped rows by their ANCHOR position (so
+        // a barBefore wraps together with its chord), converting pos to be
+        // local to that row. Unlike bucketByRange, local positions are NOT
+        // clamped at 0 - a barBefore at a row's very start is -1 on purpose.
+        function bucketBars(placements, ranges) {
+            const buckets = ranges.map(() => []);
+            for (const pl of placements) {
+                const segIdx = segmentIndexForChar(ranges, pl.anchor);
+                buckets[segIdx].push({ text: pl.text, localPos: pl.pos - ranges[segIdx].start });
+            }
+            return buckets;
+        }
+
+        function barMarksHTML(bucket) {
+            return bucket.map((b) => `<span class="bar-mark" style="left:${b.localPos}ch">${escapeHtml(b.text)}</span>`).join('');
+        }
+
         function buildEvenGridHTML(lt, lineIdx, maxChars, forPrint) {
             const measuresSpanned = lt.measureEnd - lt.measureStart;
             const totalQuarters = Math.round(measuresSpanned * 4);
@@ -2655,7 +2789,10 @@
                     const qPos = (cp.measurePosition - lt.measureStart) * 4;
                     if (qPos < rowStart - 1e-6 || qPos > rowEnd + 1e-6) return;
                     const frac = (qPos - rowStart) / rowQuarters;
-                    html += `<span class="chord-label" data-line-idx="${lineIdx}" data-chord-idx="${chordIdx}" style="left:${(frac * 100).toFixed(3)}%">${escapeHtml(cp.chord)}</span>`;
+                    const leftPct = (frac * 100).toFixed(3);
+                    if (cp.barBefore) html += `<span class="bar-mark" style="left:calc(${leftPct}% - 1ch)">${escapeHtml(cp.barBefore)}</span>`;
+                    html += `<span class="chord-label" data-line-idx="${lineIdx}" data-chord-idx="${chordIdx}" style="left:${leftPct}%">${escapeHtml(cp.chord)}</span>`;
+                    if (cp.barAfter) html += `<span class="bar-mark" style="left:calc(${leftPct}% + ${Math.max(cp.chord.length, 1)}ch)">${escapeHtml(cp.barAfter)}</span>`;
                 });
                 html += '</div>';
                 html += '</div>';
@@ -2769,11 +2906,17 @@
             const ranges = wrapTextRanges(line.lyric, maxChars);
             const chordBuckets = bucketByRange(chordPositions, ranges, (cp) => cp.charIndex);
             const tickBuckets = bucketByRange(ticks, ranges, (t) => t.leftCh);
+            const barBuckets = bucketBars(computeBarPlacements(line, chordPositions.map((cp) => ({
+                name: cp.chord, barBefore: cp.barBefore, barAfter: cp.barAfter, pos: cp.charIndex,
+            }))), ranges);
 
             let out = '';
             ranges.forEach((range, segIdx) => {
                 const segLyric = line.lyric.slice(range.start, range.end);
-                const width = Math.max(segLyric.length, 1);
+                // A bar at the very end of the lyric (marking the end of a
+                // measure) sits one past the last character - widen the
+                // row so it isn't outside its own grid box.
+                const width = Math.max(segLyric.length, 1, ...barBuckets[segIdx].map((b) => b.localPos + 1));
 
                 let html = `<div class="sheet-line" data-line-idx="${lineIdx}">`;
                 html += `<div class="sheet-grid" style="width:${width}ch">`;
@@ -2806,6 +2949,7 @@
                 for (const { item: cp, origIdx, localPos } of chordBuckets[segIdx]) {
                     html += `<span class="chord-label" data-line-idx="${lineIdx}" data-chord-idx="${origIdx}" style="left:${localPos}ch">${escapeHtml(cp.chord)}</span>`;
                 }
+                html += barMarksHTML(barBuckets[segIdx]);
                 html += '</div>';
 
                 html += '</div>';
@@ -2852,9 +2996,12 @@
         function computeChordDisplayIndexes(sorted) {
             let cursor = 0;
             return sorted.map((chord) => {
-                let pos = Math.max(chord.index, cursor);
+                // A barBefore needs its own free column just left of the
+                // chord (except on the line's very first chord, where it
+                // goes in the gutter) and a barAfter one just right of it.
+                let pos = Math.max(chord.index, chord.barBefore && cursor > 0 ? cursor + 1 : cursor);
                 if (cursor > 0 && pos === cursor) pos += 1;
-                cursor = pos + Math.max(chord.chord.length, 1);
+                cursor = pos + Math.max(chord.chord.length, 1) + (chord.barAfter ? 1 : 0);
                 return pos;
             });
         }
@@ -2865,6 +3012,9 @@
             const displayIndexes = computeChordDisplayIndexes(sorted);
             const displayChords = sorted.map((chord, i) => ({ chord, displayIndex: displayIndexes[i] }));
             const chordBuckets = bucketByRange(displayChords, ranges, (d) => d.displayIndex);
+            const barBuckets = bucketBars(computeBarPlacements(line, displayChords.map((d) => ({
+                name: d.chord.chord, barBefore: d.chord.barBefore, barAfter: d.chord.barAfter, pos: d.displayIndex,
+            }))), ranges);
 
             let out = '';
             ranges.forEach((range, segIdx) => {
@@ -2875,6 +3025,7 @@
                 for (const { item: d, origIdx, localPos } of chordBuckets[segIdx]) {
                     html += `<span class="chord-label" data-line-idx="${lineIdx}" data-chord-idx="${origIdx}" style="left:${localPos}ch">${escapeHtml(d.chord.chord)}</span>`;
                 }
+                html += barMarksHTML(barBuckets[segIdx]);
                 html += '</div>';
                 html += '</div>';
                 // In print, an intro/instrumental line - chords with no
@@ -2928,9 +3079,9 @@
                         continue;
                     }
                     const lt = timing.lineTimings[lineIdx];
-                    const hasChords = markTime
+                    const hasChords = (markTime
                         ? (lt && lt.chordPositions.length > 0)
-                        : line.chords.length > 0;
+                        : line.chords.length > 0) || lineHasFreeBarsOnly(line);
 
                     let width;
                     if (hasChords && markTime && !lt.hasLyric) {
@@ -2946,6 +3097,9 @@
                     lineIdx++;
                 }
             }
+            // Bars add a 1ch left gutter (.has-bars) and may trail one
+            // past the last character.
+            if (songHasBars(song)) maxChars += 2;
             return maxChars;
         }
 
@@ -2973,8 +3127,9 @@
             // ARE chordpro/chordplayer tags, just not chord ones.
             const firstChordedLineIdx = findFirstChordedLineIndex(song);
 
+            const barGutter = songHasBars(song) ? ' has-bars' : '';
             for (const section of song.sections) {
-                html += `<div class="sheet-section sheet-section-${section.type}">`;
+                html += `<div class="sheet-section sheet-section-${section.type}${barGutter}">`;
                 if (section.label) html += `<div class="sheet-section-label">${escapeHtml(section.label)}</div>`;
 
                 {
@@ -3018,9 +3173,9 @@
                         }
 
                         const lt = timing.lineTimings[lineIdx];
-                        const hasChords = markTime
+                        const hasChords = (markTime
                             ? (lt && lt.chordPositions.length > 0)
-                            : line.chords.length > 0;
+                            : line.chords.length > 0) || lineHasFreeBarsOnly(line);
 
                         if (!firstChordedLineSeen && hasChords) {
                             html += '<div class="sheet-spacer"></div>';
@@ -5715,12 +5870,22 @@
         // (one line) and pasteLinesChords (several lines in one commit).
         function rebuildSourceLineText(line) {
             const sorted = [...line.chords].sort((a, b) => a.index - b.index);
+            const tokens = [
+                ...lineBars(line).map((b) => ({ kind: 'bar', index: b.index, text: b.text })),
+                ...sorted.map((c) => ({ kind: 'chord', index: c.index, c })),
+            ].sort((a, b) => a.index - b.index || (a.kind === b.kind ? 0 : a.kind === 'bar' ? -1 : 1));
             let rebuilt = '';
             let cursor = 0;
-            sorted.forEach((c) => {
-                rebuilt += line.lyric.slice(cursor, c.index);
-                rebuilt += `[${c.chord}]`;
-                cursor = c.index;
+            tokens.forEach((t) => {
+                rebuilt += line.lyric.slice(cursor, t.index);
+                if (t.kind === 'bar') {
+                    rebuilt += `[${t.text}]`;
+                } else {
+                    if (t.c.barBefore) rebuilt += `[${t.c.barBefore}]`;
+                    rebuilt += `[${t.c.chord}]`;
+                    if (t.c.barAfter) rebuilt += `[${t.c.barAfter}]`;
+                }
+                cursor = t.index;
             });
             rebuilt += line.lyric.slice(cursor);
             return rebuilt;
