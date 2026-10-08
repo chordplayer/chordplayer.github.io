@@ -3602,7 +3602,7 @@
                 printSheet.classList.add('no-legend');
             }
             document.getElementById('printFontSizeOverride').textContent = fontSizePt < PRINT_BASE_FONT_PT
-                ? `@media print { .sheet-lyric, .sheet-chords, .sheet-grid { font-size: ${fontSizePt.toFixed(2)}pt !important; } }`
+                ? `@media print { .sheet-lyric, .sheet-chords, .sheet-grid, .sheet-grid-classic { font-size: ${fontSizePt.toFixed(2)}pt !important; } }`
                 : '';
         }
 
