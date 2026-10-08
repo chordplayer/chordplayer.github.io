@@ -64,3 +64,6 @@ Extended ChordPro with all tags filled in:
 
 ## Use Case
 Teaching/playalong tools where students need to see exactly when chords change, at beat-level precision, synced to lyrics.
+
+## ChordPro view: scrolls, doesn't highlight
+Viewing plain "Chordpro" (no `{x_cpl_m:}` tags), playback still scrolls at the song tempo, assuming one measure per chord, but no chord is highlighted as "currently playing", and the paused resume-flash / right-click start mark are unavailable - those positions are only a guess there. All of that is ChordPlayer view only.

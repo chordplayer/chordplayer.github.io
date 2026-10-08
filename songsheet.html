@@ -4827,7 +4827,15 @@
         // Highlights whichever chord is currently sounding, based on the
         // same elapsed-measure clock that drives scrolling - only relevant
         // in ChordPlayer view, since Source never renders chord-label spans.
+        // Never in ChordPro view: with no {x_cpl_m:} tags there, chord
+        // positions are only a one-measure-per-chord guess (see
+        // computeTaggedTiming), so lighting a chord would claim a precision
+        // we don't have. Scrolling still follows that guess; nothing highlights.
         function updateActiveChordHighlight(elapsedMeasures) {
+            if (!document.getElementById('sourceViewTagged').checked) {
+                clearChordHighlight();
+                return;
+            }
             const el = findChordLabelEl(findChordAtOrBeforeMeasure(elapsedMeasures));
             if (el === activeChordEl) return;
             if (activeChordEl) activeChordEl.classList.remove('chord-active');
