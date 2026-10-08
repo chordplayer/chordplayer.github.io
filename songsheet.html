@@ -1441,6 +1441,12 @@
             display: none !important;
         }
 
+        .print-page-break {
+            break-after: page;
+            page-break-after: always;
+            height: 0;
+        }
+
         .print-raw-text {
             font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
             font-size: 12px;
@@ -1991,6 +1997,9 @@
                         case 'comment': case 'c': case 'comment_italic': case 'ci':
                             currentSection.lines.push({ type: 'comment', text: val });
                             break;
+                        case 'new_page': case 'np':
+                            currentSection.lines.push({ type: 'pagebreak' });
+                            break;
                         case 'start_of_chorus': case 'soc':
                             pushSection();
                             currentSection = { type: 'chorus', label: val || 'Chorus', lines: [] };
@@ -2248,6 +2257,7 @@
                     }
                     bodyStarted = true;
                     if (line.type === 'comment') { out.push(`{comment: ${line.text}}`); continue; }
+                    if (line.type === 'pagebreak') { out.push('{new_page}'); continue; }
 
                     const lt = timing.lineTimings[ti];
                     ti++;
@@ -3167,6 +3177,12 @@
                             continue;
                         }
 
+                        // {new_page}/{np}: print-only forced page break.
+                        if (line.type === 'pagebreak') {
+                            if (forPrint) html += '<div class="print-page-break"></div>';
+                            continue;
+                        }
+
                         if (firstChordedLineIdx >= 0 && lineIdx < firstChordedLineIdx) {
                             lineIdx++;
                             continue;
@@ -3577,7 +3593,12 @@
             } else {
                 const showTagged = document.getElementById('sourceViewTagged').checked;
                 const text = showTagged ? chordPlayerText : chordProText;
-                document.getElementById('printBody').innerHTML = `<pre class="print-raw-text">${escapeHtml(text)}</pre>`;
+                // {new_page}/{np} on a line of its own splits the dump
+                // into one <pre> per page (CSS can't break inside a <pre>).
+                const rawPages = text.split(/^[ \t]*\{(?:new_page|np)\s*\}[ \t]*\r?\n?/mi);
+                document.getElementById('printBody').innerHTML = rawPages
+                    .map(t => `<pre class="print-raw-text">${escapeHtml(t)}</pre>`)
+                    .join('<div class="print-page-break"></div>');
                 printSheet.classList.add('no-legend');
             }
             document.getElementById('printFontSizeOverride').textContent = fontSizePt < PRINT_BASE_FONT_PT

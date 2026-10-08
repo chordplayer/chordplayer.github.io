@@ -17,6 +17,7 @@ Standard directives handled by `parseChordPro()`:
 | `{time:}` | | Time signature (e.g. `4/4`) |
 | `{tempo:}` | | Tempo in BPM |
 | `{comment:}` | `{c:}`, `{comment_italic:}`, `{ci:}` | Inline comment line |
+| `{new_page}` | `{np}` | Forced page break in printed/PDF output only (no effect on screen). Sheet view breaks at that point; Raw view (ChordPro or ChordPlayer text) splits the dump there, and the tag line itself isn't printed. Preserved on Save. |
 | `{start_of_chorus:}` | `{soc:}` | Begin chorus section |
 | `{end_of_chorus:}` | `{eoc:}` | End chorus section |
 | `{start_of_verse:}` | `{sov:}` | Begin verse section |
