@@ -1447,6 +1447,8 @@
             height: 0;
         }
 
+        .print-raw-title { font-size: 18px; font-weight: bold; margin-bottom: 2px; }
+        .print-raw-sub { font-size: 12px; margin-bottom: 14px; }
         .print-raw-text {
             font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
             font-size: 12px;
@@ -3568,6 +3570,43 @@
             updatePrintOutput(displaySong, timing, markTime);
         }
 
+        // Reduces a ChordPro / ChordPlayer buffer to printable lyrics plus
+        // the four header fields. Directives (including {np}) and inline
+        // [chords] / {x_cpl_m:..} tags are dropped, as are tab blocks and
+        // chord-only lines. Section boundaries and blank lines become a
+        // single blank line between stanzas.
+        function buildRawPrintLyrics(text) {
+            const meta = { title: '', composer: '', year: '', capo: '' };
+            const out = [];
+            let inTab = false;
+            const pushBlank = () => { if (out.length && out[out.length - 1] !== '') out.push(''); };
+            const sectionStart = /^(start_of_\w+|so[cvbt])$/;
+            const sectionEnd = /^(end_of_\w+|eo[cvbt])$/;
+            for (const raw of text.split(/\r?\n/)) {
+                const line = raw.trim();
+                const m = line.match(/^\{([^:}]+)(?::\s*(.*))?\}$/);
+                if (m) {
+                    const d = m[1].trim().toLowerCase();
+                    const val = (m[2] || '').trim();
+                    if (d === 'title' || d === 't') meta.title = val;
+                    else if (d === 'composer') meta.composer = val;
+                    else if (d === 'year') meta.year = val;
+                    else if (d === 'capo') meta.capo = val;
+                    else if (d === 'start_of_tab' || d === 'sot') { inTab = true; pushBlank(); }
+                    else if (d === 'end_of_tab' || d === 'eot') { inTab = false; pushBlank(); }
+                    else if (sectionStart.test(d) || sectionEnd.test(d)) pushBlank();
+                    continue;
+                }
+                if (inTab) continue;
+                if (line === '') { pushBlank(); continue; }
+                const lyric = line.replace(/\{[^}]*\}/g, '').replace(/\[[^\]]*\]/g, '').trim();
+                if (lyric === '') continue;  // chord-/tag-only line
+                out.push(lyric);
+            }
+            while (out.length && out[out.length - 1] === '') out.pop();
+            return { ...meta, body: out.join('\n') };
+        }
+
         // Print mirrors whichever view (Raw vs Songsheet) is currently on
         // screen, independent of what's shown live - Raw always prints a
         // plain monospace dump of the active buffer with no legend; Song
@@ -3593,12 +3632,15 @@
             } else {
                 const showTagged = document.getElementById('sourceViewTagged').checked;
                 const text = showTagged ? chordPlayerText : chordProText;
-                // {new_page}/{np} on a line of its own splits the dump
-                // into one <pre> per page (CSS can't break inside a <pre>).
-                const rawPages = text.split(/^[ \t]*\{(?:new_page|np)\s*\}[ \t]*\r?\n?/mi);
-                document.getElementById('printBody').innerHTML = rawPages
-                    .map(t => `<pre class="print-raw-text">${escapeHtml(t)}</pre>`)
-                    .join('<div class="print-page-break"></div>');
+                // Raw print is lyrics-only: header (title / composer /
+                // year / capo), then the lyrics with every tag, chord
+                // and {np} stripped (see buildRawPrintLyrics).
+                const r = buildRawPrintLyrics(text);
+                const sub = [r.composer, r.year, r.capo ? 'Capo ' + r.capo : ''].filter(Boolean).join(' \u00b7 ');
+                document.getElementById('printBody').innerHTML =
+                    (r.title ? `<div class="print-raw-title">${escapeHtml(r.title)}</div>` : '') +
+                    (sub ? `<div class="print-raw-sub">${escapeHtml(sub)}</div>` : '') +
+                    `<pre class="print-raw-text">${escapeHtml(r.body)}</pre>`;
                 printSheet.classList.add('no-legend');
             }
             document.getElementById('printFontSizeOverride').textContent = fontSizePt < PRINT_BASE_FONT_PT
